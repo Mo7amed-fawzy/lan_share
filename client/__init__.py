@@ -1,0 +1,1 @@
+"""Lan-Share client package."""

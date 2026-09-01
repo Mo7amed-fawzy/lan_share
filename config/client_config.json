@@ -1,0 +1,11 @@
+{
+    "server": "127.0.0.1",
+    "port": 8501,
+    "stream": "my-desktop",
+    "name": "my-desktop",
+    "fps": 10.0,
+    "quality": 80,
+    "scale": 0.5,
+    "region": null,
+    "log_level": "INFO"
+}

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lan-Share - Screen share</title>
+<style>
+  :root {
+    --bg: #2d2d3f;
+    --surface: #1e1e2e;
+    --card: #26263a;
+    --pill: #33344a;
+    --border: #3a3a54;
+    --text: #94a3b8;
+    --text-strong: #b9c4d4;
+    --muted: #8592a6;
+    --accent: #505a76;
+    --accent-strong: #66718f;
+    --ok: #46d17b;
+    --err: #e5736e;
+    --radius: 12px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface);
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .icon { width: 26px; height: 26px; color: var(--text); }
+  .brand-title { font-size: 15px; font-weight: 600; color: var(--text-strong); letter-spacing: .02em; }
+  .brand-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .hdr-pills { display: flex; gap: 8px; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--pill); border: 1px solid var(--border);
+    color: var(--text); border-radius: 999px;
+    padding: 6px 13px; font-size: 12px; white-space: nowrap;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .dot.err { background: var(--err); box-shadow: 0 0 6px var(--err); }
+
+  main { max-width: 780px; margin: 0 auto; padding: 28px 20px 40px; }
+
+  .hero {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 34px 0 30px;
+  }
+  .hero-icon { width: 78px; height: 70px; color: var(--text); margin-bottom: 18px; }
+  .hero h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; color: var(--text); }
+  .hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 420px; line-height: 1.5; }
+  .hero-actions { display: flex; gap: 10px; margin-top: 22px; }
+
+  .cards { display: grid; gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+  }
+  .card h2 {
+    margin: 0 0 14px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  label { display: block; font-size: 11.5px; color: var(--muted); margin: 0 0 5px; }
+  input {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-strong); border-radius: 10px;
+    padding: 9px 12px; font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--accent-strong); }
+  input::placeholder { color: #5c6575; }
+
+  button {
+    background: var(--pill); border: 1px solid var(--border);
+    color: var(--text); border-radius: 999px;
+    padding: 9px 18px; font-size: 13.5px; cursor: pointer;
+    font-family: inherit; transition: background .15s ease, color .15s ease;
+  }
+  button:hover { background: var(--accent); color: #eef1f7; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent-strong);
+    color: #eef1f7; font-weight: 500;
+  }
+  button.primary:hover { background: var(--accent-strong); }
+  button.danger { background: #6b3a44; border-color: #8a4a56; color: #f3d8da; }
+  button.danger:hover { background: #8a4a56; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled:hover { background: var(--pill); color: var(--text); }
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+  .muted { color: var(--muted); }
+  ul#streams { list-style: none; padding: 0; margin: 0; }
+  ul#streams li {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+    margin-top: 8px; background: var(--surface); font-size: 14px;
+  }
+  ul#streams li a {
+    color: var(--text-strong); text-decoration: none; font-size: 12.5px;
+    border: 1px solid var(--border); background: var(--pill);
+    border-radius: 999px; padding: 5px 14px;
+  }
+  ul#streams li a:hover { background: var(--accent); }
+  .stream-live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .stream-live .dot { width: 7px; height: 7px; }
+
+  #status { font-size: 12.5px; margin-top: 16px; text-align: center; color: var(--muted); }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--err); }
+  #share-status { font-size: 12.5px; margin-top: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg class="icon" viewBox="0 0 72 66" aria-hidden="true">
+      <rect x="4" y="2" width="64" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>
+      <rect x="4" y="36" width="64" height="6" rx="3" fill="currentColor"/>
+      <rect x="33" y="42" width="6" height="10" fill="currentColor"/>
+      <path d="M24 57 h24 v4 h-24 z" fill="currentColor"/>
+    </svg>
+    <div>
+      <div class="brand-title">Lan-Share</div>
+      <div class="brand-sub">screen sharing on your LAN</div>
+    </div>
+  </div>
+  <div class="hdr-pills">
+    <span class="pill" id="pill-relay"><span class="dot" id="dot-relay"></span><span id="pill-relay-text">Relay: unknown</span></span>
+    <span class="pill" id="pill-share"><span class="dot" id="dot-share"></span><span id="pill-share-text">Not sharing</span></span>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <svg class="hero-icon" viewBox="0 0 72 66" aria-hidden="true">
+      <rect x="4" y="2" width="64" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>
+      <rect x="4" y="36" width="64" height="6" rx="3" fill="currentColor"/>
+      <rect x="33" y="42" width="6" height="10" fill="currentColor"/>
+      <path d="M24 57 h24 v4 h-24 z" fill="currentColor"/>
+    </svg>
+    <h1 id="hero-title">Connect to a host first</h1>
+    <p id="hero-sub">Start the relay server, then share this screen or pick a stream from the list below.</p>
+    <div class="hero-actions">
+      <button class="secondary" onclick="refreshStatus()">Refresh status</button>
+      <button class="secondary" onclick="refreshStreams()">Refresh streams</button>
+    </div>
+  </section>
+
+  <div class="cards">
+
+    <section class="card">
+      <h2>Relay server</h2>
+      <div class="row">
+        <div><label>Server IP</label><input id="server" value="" placeholder="e.g. 192.168.1.50" spellcheck="false"></div>
+        <div><label>Port</label><input id="relay-port" value="8501"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Share this screen</h2>
+      <div class="row">
+        <div><label>Stream name</label><input id="stream" value="" placeholder="e.g. Alhassan"></div>
+        <div><label>FPS</label><input id="fps" type="number" min="1" max="30" value="10"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label>Quality (1-100)</label><input id="quality" type="number" min="1" max="100" value="80"></div>
+        <div><label>Resolution</label><input id="resolution" type="text" value="1600x900" disabled></div>
+      </div>
+      <div class="btn-row">
+        <button class="primary" id="btn-share" onclick="toggleShare()">Start sharing</button>
+        <button class="danger" id="btn-stop" onclick="stopShare()" disabled>Stop</button>
+      </div>
+      <div id="share-status">Not sharing.</div>
+    </section>
+
+    <section class="card">
+      <h2>Available streams</h2>
+      <ul id="streams"><li class="muted">Nothing loaded yet - click "Refresh streams".</li></ul>
+    </section>
+
+  </div>
+
+  <div id="status"></div>
+</main>
+
+<script>
+const serverInput = document.getElementById('server');
+const portInput = document.getElementById('relay-port');
+const streamInput = document.getElementById('stream');
+const statusEl = document.getElementById('status');
+
+function relay() {
+  return { server: serverInput.value.trim(),
+           port: portInput.value.trim() || '8501' };
+}
+
+function setStatus(msg, ok) {
+  statusEl.textContent = msg;
+  statusEl.className = ok ? 'ok' : 'err';
+}
+
+function setHero(title, sub) {
+  document.getElementById('hero-title').textContent = title;
+  document.getElementById('hero-sub').textContent = sub;
+}
+
+function setRelayPill(text, state) {
+  document.getElementById('pill-relay-text').textContent = text;
+  const d = document.getElementById('dot-relay');
+  d.className = 'dot ' + (state || '');
+}
+
+function setSharePill(text, state) {
+  document.getElementById('pill-share-text').textContent = text;
+  const d = document.getElementById('dot-share');
+  d.className = 'dot ' + (state || '');
+}
+
+async function refreshStatus() {
+  let r;
+  try {
+    r = await fetch('/api/status');
+  } catch (e) {
+    setStatus('Cannot reach the local manager: ' + e.message, false);
+    return;
+  }
+  const s = await r.json();
+  if (s.relay_server) { serverInput.value = s.relay_server; }
+  portInput.value = s.relay_port;
+  if (s.stream) streamInput.value = s.stream;
+  document.getElementById('btn-share').disabled = s.sharing;
+  document.getElementById('btn-stop').disabled = !s.sharing;
+  const shareText = s.sharing ? 'Sharing "' + s.stream + '"' : 'Not sharing.';
+  document.getElementById('share-status').textContent = shareText;
+  setSharePill(s.sharing ? 'Sharing' : 'Not sharing', s.sharing ? 'ok' : '');
+  const state = s.relay_state || 'manual';
+  if (s.sharing) setHero('Sharing "' + s.stream + '"', 'Your screen is live on the relay. Open the streams list to watch it.');
+  else if (state === 'connected' && s.discovered_via === 'lan') setHero('Relay connected', 'Relay found on the LAN at ' + s.relay_server + ':' + s.relay_port + '. Share this screen or pick a stream below.');
+  else if (state === 'connected') setHero('Relay connected', 'Connected to the relay at ' + s.relay_server + ':' + s.relay_port + '.');
+  else if (state === 'unreachable') setHero('Cannot reach the relay', 'The relay server is not responding at ' + s.relay_server + ':' + s.relay_port + '. Start it with: ./scripts/run_server.sh');
+  else setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP address below, or start it with: ./scripts/run_server.sh');
+  if (s.error) {
+    setStatus('Error: ' + s.error, false);
+    setRelayPill('Relay: error', 'err');
+    return;
+  }
+  if (state === 'connected') {
+    setRelayPill('Relay: ' + s.relay_server + ':' + s.relay_port, s.sharing ? 'ok' : '');
+    setStatus('Connected to relay ' + s.relay_server + ':' + s.relay_port, true);
+  } else if (state === 'unreachable') {
+    setRelayPill('Relay: unreachable', 'err');
+  } else if (state === 'discovery-failed') {
+    setRelayPill('Relay: discovery failed', 'err');
+  } else {
+    setRelayPill('Relay: manual server required', 'err');
+  }
+}
+
+async function refreshStreams() {
+  const { server, port } = relay();
+  const ul = document.getElementById('streams');
+  if (!server) {
+    ul.innerHTML = '<li class="muted">Manual server required: enter the relay IP in the Server field first.</li>';
+    setRelayPill('Relay: manual server required', 'err');
+    setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP address in the Server field.');
+    return;
+  }
+  let r;
+  try {
+    r = await fetch('/api/streams?server=' + encodeURIComponent(server)
+                          + '&port=' + encodeURIComponent(port));
+  } catch (e) {
+    document.getElementById('streams').innerHTML =
+      '<li class="muted">Cannot reach server: ' + e.message + '</li>';
+    setRelayPill('Relay: unreachable', 'err');
+    return;
+  }
+  const data = await r.json();
+  if (data.relay_state === 'unreachable') {
+    ul.innerHTML = '<li class="muted">Cannot reach server: ' + (data.error || 'no reply') + '</li>';
+    setRelayPill('Relay: unreachable', 'err');
+    setHero('Cannot reach the relay', 'The relay server is not responding at ' + server + ':' + port + '. Start it with: ./scripts/run_server.sh');
+    return;
+  }
+  if (data.error) { ul.innerHTML = '<li class="muted">Cannot reach server: ' + data.error + '</li>'; return; }
+  if (!data.streams.length) { ul.innerHTML = '<li class="muted">No active streams.</li>'; return; }
+  ul.innerHTML = data.streams.map(s =>
+    '<li><span class="stream-live"><span class="dot ok"></span>' + s + '</span>' +
+    '<a href="/watch/' + encodeURIComponent(s)
+    + '?server=' + encodeURIComponent(data.server) + '&port=' + encodeURIComponent(data.port)
+    + '" target="_blank">Watch</a></li>').join('');
+  setRelayPill('Relay: ' + data.server + ':' + data.port, '');
+}
+
+async function toggleShare() {
+  const { server, port } = relay();
+  if (!server) {
+    setStatus('Manual server required: enter the relay IP in the Server field first.', false);
+    setRelayPill('Relay: manual server required', 'err');
+    return;
+  }
+  const body = {
+    server, port,
+    stream: streamInput.value.trim(),
+    fps: parseFloat(document.getElementById('fps').value) || 10,
+    quality: parseInt(document.getElementById('quality').value) || 80,
+  };
+  let r;
+  try {
+    r = await fetch('/api/share/start', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+  } catch (e) {
+    setStatus('Cannot reach the local manager: ' + e.message, false);
+    return;
+  }
+  const resp = await r.json();
+  if (resp.error) {
+    setStatus('Share failed: ' + resp.error, false);
+    setRelayPill('Relay: error', 'err');
+    setHero('Cannot reach the relay', 'The relay server is not responding at ' + server + ':' + port + '. Start it with: ./scripts/run_server.sh');
+    return;
+  }
+  await refreshStatus();
+  setStatus('Sharing started on ' + server + ':' + port, true);
+}
+
+async function stopShare() {
+  await fetch('/api/share/stop', { method: 'POST' });
+  await refreshStatus();
+  setStatus('Sharing stopped.', true);
+}
+
+refreshStatus();
+</script>
+</body>
+</html>

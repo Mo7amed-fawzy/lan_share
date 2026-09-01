@@ -1,0 +1,46 @@
+Lan-Share - setup for a new PC
+==============================
+
+Copy this whole folder to the target Linux machine (e.g. over the network or
+USB), then open a terminal inside it and run:
+
+    ./install.sh   (normal PCs: installs the client app only)
+
+    ./install.sh --server   (ONLY the one machine that runs the relay server;
+                             this also opens TCP port 8501 in the firewall)
+
+What it does:
+  1. installs dependencies  (Pillow, GTK3, tkinter)  - needs sudo once
+  2. copies Lan-Share to    ~/Lan-Share
+  3. creates a desktop launcher in the application menu
+
+Clients find the server automatically
+-------------------------------------
+The relay answers a discovery probe on UDP port 8502, so client apps find the
+server by themselves - you do NOT need to type the server IP. Just open
+"Lan-Share"; it shows the discovered server in the Server IP field. All PCs
+must be on the same LAN and the firewall must allow TCP 8501 + UDP 8502 on
+the server PC (the --server install opens both).
+
+Client PCs (everyone else)
+--------------------------
+After install you have a "Lan-Share" entry in the application menu.
+Open it, set the Server IP to the relay machine's IP, and click
+"Start sharing". You can also list and watch other sessions.
+
+Server PC (the relay machine)
+-----------------------------
+Install with --server, then start "Lan-Share Relay" from the menu. A small
+control window opens with a "Start server" and a "Stop server" button - click
+Start and keep the window open so the relay keeps running. Everyone else
+connects to it on TCP port 8501.
+
+Other ways to run it (from ~/Lan-Share):
+
+    python3 -m server.main --host 0.0.0.0 --port 8501          # relay
+    python3 -m client.desktop --server <SERVER_IP> --port 8501 # desktop app
+    python3 -m client.manager --open                           # browser GUI
+    python3 -m client.main share --server <SERVER_IP> --stream desk
+    python3 -m client.main view  --server <SERVER_IP> --stream desk
+
+All machines must be on the same LAN and able to reach the relay on TCP 8501.

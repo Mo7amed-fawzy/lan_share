@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lan-Share - Watching</title>
+<style>
+  :root {
+    --bg: #2d2d3f;
+    --surface: #1e1e2e;
+    --pill: #33344a;
+    --border: #3a3a54;
+    --text: #94a3b8;
+    --text-strong: #b9c4d4;
+    --muted: #8592a6;
+    --ok: #46d17b;
+    --radius: 12px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); margin: 0;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    padding: 12px 18px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  header .title { font-size: 14px; color: var(--text-strong); display: flex; align-items: center; gap: 9px; min-width: 0; }
+  header .title .stream { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header a {
+    color: var(--text); text-decoration: none; font-size: 12.5px;
+    border: 1px solid var(--border); background: var(--pill);
+    border-radius: 999px; padding: 6px 14px; flex: none;
+  }
+  header a:hover { background: var(--ok); color: #10211a; }
+  .live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); flex: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  main {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; padding: 20px;
+  }
+  .frame-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px;
+    max-width: 100%; max-height: 100%;
+  }
+  img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+  .waiting { color: var(--muted); font-size: 14px; text-align: center; }
+  .waiting .spinner {
+    width: 26px; height: 26px; margin: 0 auto 14px; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--text);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <svg width="20" height="18" viewBox="0 0 72 66" aria-hidden="true">
+      <rect x="4" y="2" width="64" height="40" rx="5" fill="none" stroke="#94a3b8" stroke-width="3"/>
+      <rect x="4" y="36" width="64" height="6" rx="3" fill="#94a3b8"/>
+      <rect x="33" y="42" width="6" height="10" fill="#94a3b8"/>
+      <path d="M24 57 h24 v4 h-24 z" fill="#94a3b8"/>
+    </svg>
+    <span>Watching: <span class="stream" id="title"></span></span>
+  </div>
+  <span class="live"><span class="dot"></span>LIVE</span>
+</header>
+<main>
+  <div class="frame-wrap" id="wrap">
+    <div class="waiting"><div class="spinner"></div>Connecting to stream...</div>
+  </div>
+</main>
+<script>
+const path = location.pathname;            // /watch/<stream>
+const stream = decodeURIComponent(path.slice('/watch/'.length));
+const qs = new URLSearchParams(location.search);
+document.getElementById('title').textContent = stream;
+
+const wrap = document.getElementById('wrap');
+const img = new Image();
+img.alt = 'stream';
+img.onload = function () {
+  wrap.textContent = '';
+  wrap.appendChild(img);
+  document.title = 'Lan-Share - ' + stream;
+};
+img.onerror = function () {
+  wrap.textContent = '';
+  const w = document.createElement('div');
+  w.className = 'waiting';
+  w.textContent = 'Stream is not available right now. It may have stopped.';
+  wrap.appendChild(w);
+};
+img.src = '/stream/' + encodeURIComponent(stream)
+  + '?server=' + encodeURIComponent(qs.get('server') || '127.0.0.1')
+  + '&port=' + encodeURIComponent(qs.get('port') || '8501');
+</script>
+</body>
+</html>
