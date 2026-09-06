@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Lan-Share desktop app (GTK3).
+set -euo pipefail
+cd /usr/lib/lan-share
+exec python3 -m client.desktop "$@"

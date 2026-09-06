@@ -1,0 +1,12 @@
+[Unit]
+Description=Lan-Share apt repository server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server 8080 --bind 0.0.0.0 --directory /home/abdin_04/Documents/Lan-Share/lan_share/packaging/dist
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

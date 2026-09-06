@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Lan-Share headless relay daemon (usually managed as a systemd service:
+#     systemctl enable --now lan-share-relay.service
+# If you run it by hand, a terminal is obviously fine too.
+set -euo pipefail
+cd /usr/lib/lan-share
+exec python3 -m server.main --host 0.0.0.0 --port 8501 "$@"

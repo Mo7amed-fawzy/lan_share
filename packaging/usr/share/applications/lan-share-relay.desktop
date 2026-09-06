@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Lan-Share Relay
+GenericName=Screen sharing server
+Comment=Start or stop the Lan-Share relay server on this PC (open to the LAN)
+Exec=lan-share-relay
+Icon=lan-share-server
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupWMClass=Lan-Share Relay
+Keywords=server;relay;screen;share;stream;lan;

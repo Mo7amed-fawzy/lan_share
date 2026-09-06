@@ -5,16 +5,18 @@
 <title>Lan-Share - Watching</title>
 <style>
   :root {
-    --bg: #2d2d3f;
-    --surface: #1e1e2e;
-    --pill: #33344a;
-    --border: #3a3a54;
-    --text: #94a3b8;
-    --text-strong: #b9c4d4;
-    --muted: #8592a6;
-    --ok: #46d17b;
-    --radius: 12px;
-    color-scheme: dark;
+    --bg: #2d2d3f; --surface: #1e1e2e; --card: #26263a;
+    --pill: #33344a; --border: #3a3a54;
+    --text: #94a3b8; --text-strong: #b9c4d4; --muted: #8592a6;
+    --ok: #46d17b; --err: #e5736e;
+    --radius: 12px; color-scheme: dark;
+  }
+  [data-theme="light"] {
+    --bg: #eef1f6; --surface: #ffffff; --card: #f8fafc;
+    --pill: #e7ebf2; --border: #d3dae5;
+    --text: #4a5568; --text-strong: #1f2937; --muted: #6b7488;
+    --ok: #1f9d57; --err: #c94f4f;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   body {
@@ -28,14 +30,25 @@
   }
   header .title { font-size: 14px; color: var(--text-strong); display: flex; align-items: center; gap: 9px; min-width: 0; }
   header .title .stream { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  header a {
+  header .title svg { flex: none; }
+  .hdr-right { display: flex; align-items: center; gap: 10px; flex: none; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--pill); border: 1px solid var(--border);
+    color: var(--text); border-radius: 999px;
+    padding: 5px 12px; font-size: 12px; white-space: nowrap;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); flex: none; }
+  .dot.err { background: var(--err); box-shadow: 0 0 6px var(--err); }
+  .dot.wait { background: var(--muted); box-shadow: none; animation: pulse 1.4s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+  header a, header button {
     color: var(--text); text-decoration: none; font-size: 12.5px;
     border: 1px solid var(--border); background: var(--pill);
-    border-radius: 999px; padding: 6px 14px; flex: none;
+    border-radius: 999px; padding: 6px 14px; cursor: pointer;
+    font-family: inherit; transition: background .15s, color .15s;
   }
-  header a:hover { background: var(--ok); color: #10211a; }
-  .live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); flex: none; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  header a:hover, header button:hover { background: var(--ok); color: #10211a; }
   main {
     flex: 1; display: flex; align-items: center; justify-content: center;
     overflow: hidden; padding: 20px;
@@ -59,14 +72,20 @@
 <header>
   <div class="title">
     <svg width="20" height="18" viewBox="0 0 72 66" aria-hidden="true">
-      <rect x="4" y="2" width="64" height="40" rx="5" fill="none" stroke="#94a3b8" stroke-width="3"/>
-      <rect x="4" y="36" width="64" height="6" rx="3" fill="#94a3b8"/>
-      <rect x="33" y="42" width="6" height="10" fill="#94a3b8"/>
-      <path d="M24 57 h24 v4 h-24 z" fill="#94a3b8"/>
+      <rect x="4" y="2" width="64" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>
+      <rect x="4" y="36" width="64" height="6" rx="3" fill="currentColor"/>
+      <rect x="33" y="42" width="6" height="10" fill="currentColor"/>
+      <path d="M24 57 h24 v4 h-24 z" fill="currentColor"/>
     </svg>
     <span>Watching: <span class="stream" id="title"></span></span>
   </div>
-  <span class="live"><span class="dot"></span>LIVE</span>
+  <div class="hdr-right">
+    <span class="pill" id="pill-fps"><span class="dot wait" id="dot-live"></span><span id="fps-text">-- fps</span></span>
+    <span class="pill" id="pill-age"><span id="age-text">no frames</span></span>
+    <span class="pill" id="pill-viewers"><span id="viewer-text"></span></span>
+    <button id="btn-theme">Dark</button>
+    <a id="btn-back" href="/">Back</a>
+  </div>
 </header>
 <main>
   <div class="frame-wrap" id="wrap">
@@ -74,29 +93,94 @@
   </div>
 </main>
 <script>
-const path = location.pathname;            // /watch/<stream>
+const path = location.pathname;
 const stream = decodeURIComponent(path.slice('/watch/'.length));
 const qs = new URLSearchParams(location.search);
+const server = qs.get('server') || '127.0.0.1';
+const port = qs.get('port') || '8501';
 document.getElementById('title').textContent = stream;
+document.getElementById('btn-back').href =
+  '/?server=' + encodeURIComponent(server) + '&port=' + encodeURIComponent(port);
 
+/* ── theme ──────────────────────────────────────────────────────────── */
+const THEME_KEY = 'lan-share-theme';
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  document.getElementById('btn-theme').textContent = t === 'light' ? 'Light' : 'Dark';
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+}
+applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+document.getElementById('btn-theme').onclick = () =>
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+/* ── frame stream + fps ─────────────────────────────────────────────── */
 const wrap = document.getElementById('wrap');
 const img = new Image();
 img.alt = 'stream';
+const dotLive = document.getElementById('dot-live');
+const fpsText = document.getElementById('fps-text');
+const ageText = document.getElementById('age-text');
+let frameTimes = [];
+let lastFrameTime = null;
+
 img.onload = function () {
   wrap.textContent = '';
   wrap.appendChild(img);
   document.title = 'Lan-Share - ' + stream;
+  const now = performance.now();
+  lastFrameTime = now;
+  frameTimes.push(now);
+  if (frameTimes.length > 40) frameTimes = frameTimes.slice(-40);
+  dotLive.className = 'dot';
 };
+
 img.onerror = function () {
   wrap.textContent = '';
   const w = document.createElement('div');
   w.className = 'waiting';
   w.textContent = 'Stream is not available right now. It may have stopped.';
   wrap.appendChild(w);
+  dotLive.className = 'dot err';
 };
-img.src = '/stream/' + encodeURIComponent(stream)
-  + '?server=' + encodeURIComponent(qs.get('server') || '127.0.0.1')
-  + '&port=' + encodeURIComponent(qs.get('port') || '8501');
+
+function nextFrame() {
+  img.src = '/stream/' + encodeURIComponent(stream)
+    + '?server=' + encodeURIComponent(server)
+    + '&port=' + encodeURIComponent(port);
+}
+nextFrame();
+
+/* ── fps + age tick ─────────────────────────────────────────────────── */
+setInterval(function () {
+  const now = performance.now();
+  if (lastFrameTime != null) {
+    const age = ((now - lastFrameTime) / 1000).toFixed(1);
+    ageText.textContent = age + 's ago';
+    dotLive.className = parseFloat(age) < 5 ? 'dot' : 'dot err';
+  }
+  if (frameTimes.length >= 2) {
+    var span = (frameTimes[frameTimes.length - 1] - frameTimes[0]) / 1000;
+    var fps = span > 0 ? (frameTimes.length - 1) / span : 0;
+    fpsText.textContent = fps.toFixed(1) + ' fps';
+  }
+}, 500);
+
+/* ── poll viewers + server-side frame age ────────────────────────────── */
+async function pollMeta() {
+  try {
+    const r = await fetch('/api/streams?server=' + encodeURIComponent(server) + '&port=' + encodeURIComponent(port));
+    const data = await r.json();
+    const vc = (data.viewer_counts || {})[stream] || 0;
+    const la = (data.last_frame_age || {})[stream];
+    document.getElementById('viewer-text').textContent = vc + ' watching';
+    if (la != null) {
+      ageText.textContent = la.toFixed(1) + 's ago';
+      dotLive.className = la < 5 ? 'dot' : 'dot err';
+    }
+  } catch {}
+}
+setInterval(pollMeta, 5000);
+pollMeta();
 </script>
 </body>
 </html>

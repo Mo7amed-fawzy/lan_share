@@ -138,7 +138,7 @@ class ShareManager:
     # -- relay queries ---------------------------------------------------
 
     def list_streams(self, server, port):
-        """Return the list of stream names shared on the relay."""
+        """Return (streams, meta) from the relay."""
         sock = socket.create_connection((server, port), timeout=5)
         try:
             sock.settimeout(5)
@@ -146,7 +146,12 @@ class ShareManager:
             header, _ = protocol.recv_message(sock)
             if header.get("type") != protocol.STREAM_LIST_RESP:
                 raise RuntimeError("unexpected reply: %s" % header)
-            return header.get("streams", [])
+            meta = {
+                "viewer_counts": header.get("viewer_counts", {}),
+                "last_frame_age": header.get("last_frame_age", {}),
+                "uptime": header.get("uptime", {}),
+            }
+            return header.get("streams", []), meta
         finally:
             sock.close()
 
@@ -222,9 +227,9 @@ class ManagerHTTPHandler(BaseHTTPRequestHandler):
         elif path == "/api/streams":
             server, port = self._relay_from_params(params)
             try:
-                streams = self.manager.list_streams(server, port)
+                streams, meta = self.manager.list_streams(server, port)
                 self._send_json({"streams": streams, "server": server, "port": port,
-                                 "relay_state": "connected"})
+                                 "relay_state": "connected", **meta})
             except (OSError, protocol.ProtocolError, RuntimeError) as exc:
                 self._send_json({"streams": [], "error": str(exc), "relay_state": "unreachable",
                                  "server": server, "port": port}, status=200)
@@ -258,8 +263,9 @@ class ManagerHTTPHandler(BaseHTTPRequestHandler):
                 return
             fps = float(body.get("fps") or 10.0)
             quality = int(body.get("quality") or 80)
+            region = body.get("region")
             self.manager.start_share(server, port, stream, body.get("name") or stream,
-                                     fps, quality)
+                                     fps, quality, region)
             self._send_json({"ok": True, "sharing": self.manager.sharing})
         elif parsed.path == "/api/share/stop":
             self.manager.stop_share()

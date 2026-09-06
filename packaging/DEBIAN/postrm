@@ -1,0 +1,13 @@
+#!/bin/sh
+# Lan-Share postrm: leave no stale cache or systemd state behind.
+set -e
+
+case "$1" in
+    purge)
+        rm -f /etc/apt/trusted.gpg.d/lan-share.gpg 2>/dev/null || true
+        ;;
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Lan-Share
+GenericName=Screen sharing
+Comment=Share your screen or watch sessions on your LAN
+Exec=lan-share
+Icon=lan-share
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupWMClass=Lan-Share
+Keywords=screen;share;stream;lan;remote;

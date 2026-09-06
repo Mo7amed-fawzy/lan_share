@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Lan-Share browser control panel (opens http://127.0.0.1:8701).
+set -euo pipefail
+cd /usr/lib/lan-share
+exec python3 -m client.manager --open "$@"

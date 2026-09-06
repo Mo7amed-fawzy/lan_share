@@ -12,6 +12,7 @@ import logging
 import queue
 import socket
 import threading
+import time
 
 from core import discovery, protocol
 
@@ -111,6 +112,8 @@ class ShareServer:
         self._viewers = {}                # stream -> set(Client)
         self._last_frame = {}             # stream -> (header, payload)
         self._stream_gen = {}             # stream -> generation counter
+        self._stream_started = {}         # stream -> monotonic time share began
+        self._last_frame_time = {}        # stream -> monotonic time of newest frame
         self._running = True
         self._server_sock = None
         self._discovery = discovery.DiscoveryResponder(relay_port=port)
@@ -188,7 +191,23 @@ class ShareServer:
         elif msg_type == protocol.STREAM_LIST:
             with self._lock:
                 streams = list(self._sharers)
-            client.send({"type": protocol.STREAM_LIST_RESP, "streams": streams})
+                now = time.monotonic()
+                viewer_counts = {}
+                last_frame_age = {}
+                uptime = {}
+                for s in streams:
+                    viewer_counts[s] = len(self._viewers.get(s, ()))
+                    started = self._stream_started.get(s)
+                    uptime[s] = round(now - started, 1) if started is not None else None
+                    last = self._last_frame_time.get(s)
+                    last_frame_age[s] = round(now - last, 1) if last is not None else None
+            client.send({
+                "type": protocol.STREAM_LIST_RESP,
+                "streams": streams,
+                "viewer_counts": viewer_counts,
+                "last_frame_age": last_frame_age,
+                "uptime": uptime,
+            })
         elif msg_type == protocol.SUBSCRIBE:
             self._subscribe(client, header)
         elif msg_type == protocol.FRAME:
@@ -216,6 +235,7 @@ class ShareServer:
             client.is_sharer = True
             client.generation = generation
             self._sharers[stream] = client
+            self._stream_started[stream] = time.monotonic()
             self._viewers.setdefault(stream, set())
         client.send({"type": protocol.SHARER_REGISTERED, "stream": stream})
         if replaced:
@@ -267,6 +287,7 @@ class ShareServer:
             frame = (header, payload)
             first = stream not in self._last_frame
             self._last_frame[stream] = frame
+            self._last_frame_time[stream] = time.monotonic()
             viewers = list(self._viewers.get(stream, ()))
         if first:
             logger.info("first frame received for %s (%s)", stream, client.addr)
@@ -285,7 +306,9 @@ class ShareServer:
         if was_sharer:
             del self._sharers[stream]
             self._last_frame.pop(stream, None)
+            self._last_frame_time.pop(stream, None)
             self._stream_gen.pop(stream, None)
+            self._stream_started.pop(stream, None)
             logger.info("sharer left: %s (%s)", stream, client.addr)
         viewers = self._viewers.get(stream)
         if viewers and client in viewers:

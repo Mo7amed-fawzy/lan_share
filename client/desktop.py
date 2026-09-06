@@ -39,51 +39,9 @@ except (ImportError, ValueError) as exc:
 
 from core import discovery, protocol
 from core.capture import ScreenCapture
+from client import theme
 
 logger = logging.getLogger("lan-share.desktop")
-
-CSS = b"""
-window { background-color: #2d2d3f; color: #94a3b8; }
-.header { background-color: #1e1e2e; border-bottom: 1px solid #3a3a54; }
-.brand-title { font-size: 15px; font-weight: 600; color: #b9c4d4; }
-.brand-sub { font-size: 11px; color: #8592a6; }
-.pill {
-    background-color: #33344a; border: 1px solid #3a3a54;
-    border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #94a3b8;
-}
-.pill .dot { min-width: 8px; min-height: 8px; border-radius: 4px; background-color: #8592a6; }
-.dot-ok { background-color: #46d17b; }
-.dot-err { background-color: #e5736e; }
-.content { background-color: #2d2d3f; }
-.hero-title { font-size: 20px; font-weight: 600; color: #94a3b8; }
-.hero-sub { font-size: 13px; color: #8592a6; }
-.card { background-color: #26263a; border: 1px solid #3a3a54; border-radius: 12px; }
-.card-title {
-    font-size: 11px; font-weight: 600; letter-spacing: 1px; color: #8592a6;
-}
-.field { font-size: 11px; color: #8592a6; }
-entry {
-    background-color: #1e1e2e; background-image: none;
-    border: 1px solid #3a3a54; border-radius: 10px;
-    color: #b9c4d4; padding: 6px 10px;
-}
-entry:focus { border-color: #66718f; }
-button {
-    background-color: #33344a; background-image: none;
-    border: 1px solid #3a3a54; border-radius: 999px;
-    color: #94a3b8; padding: 6px 16px;
-}
-button:hover { background-color: #505a76; color: #eef1f7; }
-button.primary { background-color: #505a76; border-color: #66718f; color: #eef1f7; font-weight: 500; }
-button.danger { background-color: #6b3a44; border-color: #8a4a56; color: #f3d8da; }
-button:disabled { opacity: 0.45; }
-.list-row { background-color: #1e1e2e; border-bottom: 1px solid #3a3a54; }
-.list-row:hover { background-color: #26263a; }
-#share-status { font-size: 12px; color: #8592a6; }
-#status-bar { background-color: #1e1e2e; color: #8592a6; font-size: 11px; padding: 6px 14px; }
-#stream-empty { font-size: 13px; color: #8592a6; }
-#watch-title { font-size: 14px; color: #b9c4d4; }
-"""
 
 REFRESH_SECONDS = 3
 SHARE_TARGET = (1600, 900)
@@ -146,6 +104,7 @@ class LanShareApp:
         self.server = server or ""
         self.port = port
         self.discovery_via = discovery_via
+        self.light = False
         self.sharing = False
         self._share_stop = threading.Event()
         self._share_thread = None
@@ -154,6 +113,8 @@ class LanShareApp:
         self._watch_image = None
         self._watch_msg = None
         self._watch_live_dot = None
+        self._watch_fps_label = None
+        self._watch_age_label = None
         self._watch_stop = threading.Event()
         self._watch_thread = None
         self._relay_proc = None
@@ -183,15 +144,26 @@ class LanShareApp:
 
     # -- styling ----------------------------------------------------------
 
-    @staticmethod
-    def _apply_css():
+    def _apply_css(self):
+        if getattr(self, "_css_provider", None) is not None:
+            Gtk.StyleContext.remove_provider_for_screen(
+                Gdk.Screen.get_default(), self._css_provider
+            )
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
+        palette = theme.LIGHT if self.light else theme.DARK
+        provider.load_from_data(theme.gtk_css(palette))
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+        self._css_provider = provider
+
+    def _toggle_theme(self, button=None):
+        self.light = not self.light
+        self._apply_css()
+        if self._btn_theme is not None:
+            self._btn_theme.set_label("Light" if self.light else "Dark")
 
     # -- helpers ----------------------------------------------------------
 
@@ -287,8 +259,12 @@ class LanShareApp:
         pills = Gtk.Box(spacing=8)
         self.pill_relay = self._new_pill("Relay: unknown")
         self.pill_share = self._new_pill("Not sharing")
+        self._btn_theme = Gtk.Button(label="Dark")
+        self._btn_theme.get_style_context().add_class("small")
+        self._btn_theme.connect("clicked", self._toggle_theme)
         pills.pack_start(self.pill_relay, False, False, 0)
         pills.pack_start(self.pill_share, False, False, 0)
+        pills.pack_start(self._btn_theme, False, False, 0)
         header.pack_end(pills, False, False, 0)
         return header
 
@@ -353,8 +329,30 @@ class LanShareApp:
         row2 = Gtk.Box(spacing=12)
         row2.pack_start(self._field_row("FPS", self.entry_fps), False, False, 0)
         row2.pack_start(self._field_row("Quality (1-100)", self.entry_quality), False, False, 0)
-        row2.pack_start(self._field_row("Resolution", self._new_entry("1600x900", width=10)), False, False, 0)
+        row2.pack_start(self._field_row("Capture", self._build_capture_combo()), True, True, 0)
         card.pack_start(row2, False, False, 0)
+
+        self._region_box = Gtk.Box(spacing=12)
+        self._region_box.set_no_show_all(True)
+        self._region_box.set_visible(False)
+        sp_x = self._new_entry("0", width=5); sp_y = self._new_entry("0", width=5)
+        sp_w = self._new_entry("1600", width=5); sp_h = self._new_entry("900", width=5)
+        self._region_fields = (sp_x, sp_y, sp_w, sp_h)
+        for lbl, sp in [("X", sp_x), ("Y", sp_y), ("W", sp_w), ("H", sp_h)]:
+            self._region_box.pack_start(self._field_row(lbl, sp), False, False, 0)
+        card.pack_start(self._region_box, False, False, 0)
+
+        self._window_box = Gtk.Box(spacing=12)
+        self._window_box.set_no_show_all(True)
+        self._window_box.set_visible(False)
+        self.combo_window = Gtk.ComboBoxText()
+        self.combo_window.append("none", "(click Refresh)")
+        btn_refresh = Gtk.Button(label="Refresh")
+        btn_refresh.get_style_context().add_class("small")
+        btn_refresh.connect("clicked", self._refresh_windows)
+        self._window_box.pack_start(self._field_row("Window", self.combo_window), True, True, 0)
+        self._window_box.pack_start(btn_refresh, False, False, 0)
+        card.pack_start(self._window_box, False, False, 0)
 
         buttons = Gtk.Box(spacing=10)
         self.btn_share = Gtk.Button(label="Start sharing")
@@ -375,6 +373,71 @@ class LanShareApp:
         self.share_status.set_name("share-status")
         card.pack_start(self.share_status, False, False, 0)
         return card
+
+    def _build_capture_combo(self):
+        self.combo_capture = Gtk.ComboBoxText()
+        self.combo_capture.append("full", "Full screen")
+        self.combo_capture.append("window", "Window")
+        self.combo_capture.append("region", "Region")
+        self.combo_capture.set_active_id("full")
+        self.combo_capture.connect("changed", self._on_capture_mode_changed)
+        return self.combo_capture
+
+    def _on_capture_mode_changed(self, combo):
+        mode = combo.get_active_id()
+        self._region_box.set_visible(mode == "region")
+        self._window_box.set_visible(mode == "window")
+
+    def _refresh_windows(self, button=None):
+        self.combo_window.remove_all()
+        for w in self._wmctrl_windows():
+            self.combo_window.append(w["id"], "%s  (%d,%d %d×%d)" % (
+                w["title"] or "Window " + w["id"], w["x"], w["y"], w["w"], w["h"],
+            ))
+        self.combo_window.set_active(0)
+        self.combo_window.show_all()
+
+    @staticmethod
+    def _wmctrl_windows():
+        wins = []
+        try:
+            out = subprocess.run(
+                ["wmctrl", "-lG"], capture_output=True, text=True, timeout=3,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return wins
+        for line in out.splitlines():
+            parts = line.split(None, 12)
+            if len(parts) < 12:
+                continue
+            wid, desktop, x, y, w, h = parts[0], parts[1], *parts[2:6]
+            title = parts[11] if len(parts) > 11 else ""
+            try:
+                wins.append({"id": wid, "x": int(x), "y": int(y),
+                             "w": int(w), "h": int(h), "title": title})
+            except ValueError:
+                continue
+        return wins
+
+    def _capture_region(self):
+        mode = self.combo_capture.get_active_id()
+        if mode == "region":
+            try:
+                x = int(self._region_fields[0].get_text().strip())
+                y = int(self._region_fields[1].get_text().strip())
+                w = max(1, int(self._region_fields[2].get_text().strip()))
+                h = max(1, int(self._region_fields[3].get_text().strip()))
+            except ValueError:
+                return None
+            return (x, y, w, h)
+        if mode == "window":
+            wid = self.combo_window.get_active_id()
+            if not wid or wid == "none":
+                return None
+            for w in self._wmctrl_windows():
+                if w["id"] == wid:
+                    return (w["x"], w["y"], w["w"], w["h"])
+        return None
 
     def _build_sessions_card(self):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -409,7 +472,13 @@ class LanShareApp:
             header, _ = protocol.recv_message(sock)
             if header.get("type") != protocol.STREAM_LIST_RESP:
                 raise RuntimeError("unexpected reply: %s" % header)
-            return header.get("streams", [])
+            streams = header.get("streams", [])
+            meta = {
+                "viewer_counts": header.get("viewer_counts", {}),
+                "last_frame_age": header.get("last_frame_age", {}),
+                "uptime": header.get("uptime", {}),
+            }
+            return streams, meta
         finally:
             sock.close()
 
@@ -423,10 +492,10 @@ class LanShareApp:
 
         def work():
             try:
-                streams = self.list_streams()
-                self._ui_update(self._render_sessions, streams, None)
+                streams, meta = self.list_streams()
+                self._ui_update(self._render_sessions, streams, meta, None)
             except Exception as exc:
-                self._ui_update(self._render_sessions, None, str(exc))
+                self._ui_update(self._render_sessions, None, {}, str(exc))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -451,7 +520,7 @@ class LanShareApp:
             "Server field, or start the local relay below.",
         )
 
-    def _render_sessions(self, streams, error):
+    def _render_sessions(self, streams, meta, error):
         self._refreshing = False
         for row in self.listbox.get_children():
             self.listbox.remove(row)
@@ -474,19 +543,36 @@ class LanShareApp:
                 self._set_hero("Ready", "Share this screen with a session name, or watch a session below.")
             return
         for stream in streams:
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            row.set_margin_start(10)
-            row.set_margin_end(10)
-            row.set_margin_top(7)
-            row.set_margin_bottom(7)
+            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            row.set_margin_start(10); row.set_margin_end(10)
+            row.set_margin_top(7);   row.set_margin_bottom(7)
+            top = Gtk.Box(spacing=10)
             dot = self._new_dot("dot-ok")
             dot.set_margin_top(5)
-            row.pack_start(dot, False, False, 0)
             name = Gtk.Label(label=stream, xalign=0, hexpand=True)
-            watch = Gtk.Button(label="Watch")
-            watch.connect("clicked", self._on_watch_clicked, stream)
-            row.pack_start(name, True, True, 0)
-            row.pack_start(watch, False, False, 0)
+            view_btn = Gtk.Button(label="Watch")
+            view_btn.connect("clicked", self._on_watch_clicked, stream)
+            top.pack_start(dot, False, False, 0)
+            top.pack_start(name, True, True, 0)
+            top.pack_end(view_btn, False, False, 0)
+            viewers = meta.get("viewer_counts", {}).get(stream, 0)
+            age = meta.get("last_frame_age", {}).get(stream)
+            up  = meta.get("uptime", {}).get(stream)
+            parts = ["%d watching" % viewers]
+            if age is not None:
+                parts.append("frame %.1fs ago" % age)
+            else:
+                parts.append("no frames yet")
+            if up is not None:
+                parts.append("up %ds" % int(up))
+            sub = Gtk.Label(label="  ·  ".join(parts), xalign=0)
+            sub.get_style_context().add_class("meta")
+            if age is not None and age > 10:
+                sub.get_style_context().add_class("meta-err")
+            elif age is not None:
+                sub.get_style_context().add_class("meta-ok")
+            row.pack_start(top, False, False, 0)
+            row.pack_start(sub, False, False, 0)
             self.listbox.add(row)
         self.listbox.show_all()
         self._set_pill(self.pill_relay, "dot-ok", "Relay: %s:%s" % (self.server, self.port))
@@ -518,6 +604,8 @@ class LanShareApp:
             self.share_status.set_text("Invalid settings: %s" % exc)
             return
 
+        region = self._capture_region()
+
         self._share_stop.set()
         if self._share_thread is not None:
             self._share_thread.join(timeout=3)
@@ -526,7 +614,7 @@ class LanShareApp:
         self.sharing = True
         self._share_thread = threading.Thread(
             target=self._share_worker,
-            args=(server, port, name, fps, quality),
+            args=(server, port, name, fps, quality, region),
             daemon=True,
         )
         self._share_thread.start()
@@ -536,7 +624,7 @@ class LanShareApp:
         self._set_hero('Sharing "%s"' % name, "Waiting for the relay to register the session ...")
         self._set_status("Connecting to %s:%s ..." % (server, port), None)
 
-    def _share_worker(self, server, port, stream, fps, quality):
+    def _share_worker(self, server, port, stream, fps, quality, region):
         sock = None
         try:
             sock = socket.create_connection((server, port), timeout=5)
@@ -550,7 +638,7 @@ class LanShareApp:
                 return
             self._ui_update(self._on_share_registered, stream, server, port)
             sock.settimeout(None)
-            capture = ScreenCapture(quality=quality, target_size=SHARE_TARGET)
+            capture = ScreenCapture(region=region, quality=quality, target_size=SHARE_TARGET)
             seq = 0
             while not self._share_stop.is_set():
                 start = time.monotonic()
@@ -633,6 +721,9 @@ class LanShareApp:
 
         self._watch_stop.clear()
         self._watch_last_pixbuf = None
+        self._watch_last_frame_time = None
+        self._watch_frame_times = []
+
         self._watch_window = Gtk.Window(title="Lan-Share - %s" % stream)
         self._watch_window.set_default_size(1600, 900)
         self._watch_window.set_position(Gtk.WindowPosition.CENTER)
@@ -648,10 +739,8 @@ class LanShareApp:
         overlay.add(vbox)
 
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        header.set_margin_top(6)
-        header.set_margin_bottom(6)
-        header.set_margin_start(12)
-        header.set_margin_end(12)
+        header.set_margin_top(6); header.set_margin_bottom(6)
+        header.set_margin_start(12); header.set_margin_end(12)
         self._watch_live_dot = Gtk.Box()
         self._watch_live_dot.set_size_request(10, 10)
         self._watch_live_dot.get_style_context().add_class("dot")
@@ -660,6 +749,14 @@ class LanShareApp:
         title = Gtk.Label(label="Lan-Share - %s" % stream, xalign=0, hexpand=True)
         title.set_name("watch-title")
         header.pack_start(title, True, True, 0)
+        self._watch_fps_label = Gtk.Label(label="", xalign=0)
+        self._watch_fps_label.get_style_context().add_class("meta")
+        self._watch_age_label = Gtk.Label(label="", xalign=0)
+        self._watch_age_label.get_style_context().add_class("meta")
+        header.pack_end(Gtk.Label(label=""), False, False, 0)
+        header.pack_end(self._watch_age_label, False, False, 0)
+        header.pack_end(Gtk.Label(label="·"), False, False, 0)
+        header.pack_end(self._watch_fps_label, False, False, 0)
         close_btn = Gtk.Button(label="Close")
         close_btn.connect("clicked", self._on_watch_closed)
         header.pack_end(close_btn, False, False, 0)
@@ -678,8 +775,7 @@ class LanShareApp:
         self._watch_msg.set_name("stream-empty")
         self._watch_msg.set_halign(Gtk.Align.CENTER)
         self._watch_msg.set_valign(Gtk.Align.END)
-        self._watch_msg.set_margin_top(16)
-        self._watch_msg.set_margin_bottom(16)
+        self._watch_msg.set_margin_top(16); self._watch_msg.set_margin_bottom(16)
         self._watch_msg.set_visible(False)
         overlay.add_overlay(self._watch_msg)
 
@@ -688,6 +784,7 @@ class LanShareApp:
             target=self._watch_worker, args=(stream,), daemon=True
         )
         self._watch_thread.start()
+        GLib.timeout_add(250, self._watch_tick)
 
     def _on_watch_resize(self, widget, alloc):
         if self._watch_last_pixbuf is not None:
@@ -774,6 +871,11 @@ class LanShareApp:
                                     % header.get("reason", "unknown"))
                     break
                 if header.get("type") == protocol.FRAME and payload:
+                    now = time.monotonic()
+                    self._watch_last_frame_time = now
+                    self._watch_frame_times.append(now)
+                    if len(self._watch_frame_times) > 30:
+                        self._watch_frame_times = self._watch_frame_times[-30:]
                     pixbuf = self._jpeg_to_pixbuf(payload)
                     if pixbuf is not None:
                         GLib.idle_add(self._set_watch_pixbuf, pixbuf)
@@ -783,6 +885,35 @@ class LanShareApp:
         finally:
             if sock is not None:
                 sock.close()
+
+    def _watch_tick(self):
+        if self._watch_stop.is_set() or self._watch_window is None:
+            return False
+        now = time.monotonic()
+        if self._watch_last_frame_time is not None:
+            age = now - self._watch_last_frame_time
+            if self._watch_age_label is not None:
+                self._watch_age_label.set_text("%.1fs" % age)
+            if self._watch_live_dot is not None:
+                ctx = self._watch_live_dot.get_style_context()
+                for cls in ("dot-ok", "dot-err"):
+                    ctx.remove_class(cls)
+                ctx.add_class("dot-ok" if age < 3.0 else "dot-err")
+        else:
+            if self._watch_age_label is not None:
+                self._watch_age_label.set_text("no frames yet")
+            if self._watch_live_dot is not None:
+                ctx = self._watch_live_dot.get_style_context()
+                ctx.remove_class("dot-ok"); ctx.add_class("dot-err")
+        times = list(self._watch_frame_times)
+        if len(times) >= 2:
+            span = times[-1] - times[0]
+            fps = (len(times) - 1) / span if span > 0 else 0.0
+        else:
+            fps = 0.0
+        if self._watch_fps_label is not None:
+            self._watch_fps_label.set_text("%.0f fps" % fps)
+        return True
 
     def _watch_fail(self, message):
         self._watch_stop.set()

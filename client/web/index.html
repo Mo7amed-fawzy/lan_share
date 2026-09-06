@@ -5,42 +5,37 @@
 <title>Lan-Share - Screen share</title>
 <style>
   :root {
-    --bg: #2d2d3f;
-    --surface: #1e1e2e;
-    --card: #26263a;
-    --pill: #33344a;
-    --border: #3a3a54;
-    --text: #94a3b8;
-    --text-strong: #b9c4d4;
-    --muted: #8592a6;
-    --accent: #505a76;
-    --accent-strong: #66718f;
-    --ok: #46d17b;
-    --err: #e5736e;
-    --radius: 12px;
-    color-scheme: dark;
+    --bg: #2d2d3f; --surface: #1e1e2e; --card: #26263a;
+    --pill: #33344a; --border: #3a3a54;
+    --text: #94a3b8; --text-strong: #b9c4d4; --muted: #8592a6;
+    --accent: #505a76; --accent-strong: #66718f;
+    --ok: #46d17b; --err: #e5736e;
+    --radius: 12px; color-scheme: dark;
+  }
+  [data-theme="light"] {
+    --bg: #eef1f6; --surface: #ffffff; --card: #f8fafc;
+    --pill: #e7ebf2; --border: #d3dae5;
+    --text: #4a5568; --text-strong: #1f2937; --muted: #6b7488;
+    --accent: #aab3c8; --accent-strong: #64748b;
+    --ok: #1f9d57; --err: #c94f4f;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    margin: 0;
-    min-height: 100vh;
+    background: var(--bg); color: var(--text);
+    margin: 0; min-height: 100vh;
   }
-
   header {
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--surface);
-    padding: 14px 22px;
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 5;
+    background: var(--surface); padding: 14px 22px;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5;
   }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand .icon { width: 26px; height: 26px; color: var(--text); }
   .brand-title { font-size: 15px; font-weight: 600; color: var(--text-strong); letter-spacing: .02em; }
   .brand-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
-  .hdr-pills { display: flex; gap: 8px; align-items: center; }
+  .hdr-pills { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .pill {
     display: inline-flex; align-items: center; gap: 7px;
     background: var(--pill); border: 1px solid var(--border);
@@ -50,9 +45,7 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
   .dot.err { background: var(--err); box-shadow: 0 0 6px var(--err); }
-
   main { max-width: 780px; margin: 0 auto; padding: 28px 20px 40px; }
-
   .hero {
     display: flex; flex-direction: column; align-items: center;
     text-align: center; padding: 34px 0 30px;
@@ -61,7 +54,6 @@
   .hero h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; color: var(--text); }
   .hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 420px; line-height: 1.5; }
   .hero-actions { display: flex; gap: 10px; margin-top: 22px; }
-
   .cards { display: grid; gap: 16px; }
   .card {
     background: var(--card); border: 1px solid var(--border);
@@ -72,56 +64,61 @@
     text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
     display: flex; align-items: center; gap: 8px;
   }
-  .row { display: flex; gap: 12px; }
-  .row > div { flex: 1; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 120px; }
   label { display: block; font-size: 11.5px; color: var(--muted); margin: 0 0 5px; }
-  input {
+  input, select {
     width: 100%; box-sizing: border-box;
     background: var(--surface); border: 1px solid var(--border);
     color: var(--text-strong); border-radius: 10px;
     padding: 9px 12px; font-size: 14px;
   }
-  input:focus { outline: none; border-color: var(--accent-strong); }
+  input:focus, select:focus { outline: none; border-color: var(--accent-strong); }
   input::placeholder { color: #5c6575; }
-
   button {
     background: var(--pill); border: 1px solid var(--border);
     color: var(--text); border-radius: 999px;
     padding: 9px 18px; font-size: 13.5px; cursor: pointer;
     font-family: inherit; transition: background .15s ease, color .15s ease;
   }
-  button:hover { background: var(--accent); color: #eef1f7; }
+  button:hover { background: var(--accent); color: #ffffff; }
   button.primary {
     background: var(--accent); border-color: var(--accent-strong);
-    color: #eef1f7; font-weight: 500;
+    color: #ffffff; font-weight: 500;
   }
   button.primary:hover { background: var(--accent-strong); }
   button.danger { background: #6b3a44; border-color: #8a4a56; color: #f3d8da; }
+  [data-theme="light"] button.danger { background: #f5d9d9; border-color: #e0a3a3; color: #c94f4f; }
   button.danger:hover { background: #8a4a56; }
+  [data-theme="light"] button.danger:hover { background: #e0a3a3; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:disabled:hover { background: var(--pill); color: var(--text); }
   .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-
   .muted { color: var(--muted); }
   ul#streams { list-style: none; padding: 0; margin: 0; }
   ul#streams li {
-    display: flex; align-items: center; justify-content: space-between;
     padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
     margin-top: 8px; background: var(--surface); font-size: 14px;
   }
+  .stream-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .stream-live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-strong); min-width: 0; }
+  .stream-live .dot { width: 7px; height: 7px; }
+  .stream-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .stream-sub .age-err { color: var(--err); }
+  .stream-sub .age-ok { color: var(--ok); }
   ul#streams li a {
     color: var(--text-strong); text-decoration: none; font-size: 12.5px;
     border: 1px solid var(--border); background: var(--pill);
     border-radius: 999px; padding: 5px 14px;
   }
-  ul#streams li a:hover { background: var(--accent); }
-  .stream-live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-  .stream-live .dot { width: 7px; height: 7px; }
-
+  ul#streams li a:hover { background: var(--accent); color: #ffffff; }
   #status { font-size: 12.5px; margin-top: 16px; text-align: center; color: var(--muted); }
   #status.ok { color: var(--ok); }
   #status.err { color: var(--err); }
   #share-status { font-size: 12.5px; margin-top: 12px; color: var(--muted); }
+  #region-fields { display: none; gap: 12px; }
+  #region-fields.visible { display: flex; }
+  #region-fields > div { flex: 1; }
 </style>
 </head>
 <body>
@@ -141,6 +138,7 @@
   <div class="hdr-pills">
     <span class="pill" id="pill-relay"><span class="dot" id="dot-relay"></span><span id="pill-relay-text">Relay: unknown</span></span>
     <span class="pill" id="pill-share"><span class="dot" id="dot-share"></span><span id="pill-share-text">Not sharing</span></span>
+    <button id="btn-theme" style="padding:4px 12px;font-size:11px;">Dark</button>
   </div>
 </header>
 
@@ -178,7 +176,19 @@
       </div>
       <div class="row" style="margin-top:12px">
         <div><label>Quality (1-100)</label><input id="quality" type="number" min="1" max="100" value="80"></div>
-        <div><label>Resolution</label><input id="resolution" type="text" value="1600x900" disabled></div>
+        <div>
+          <label>Capture</label>
+          <select id="capture-mode">
+            <option value="full">Full screen</option>
+            <option value="region">Region</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" id="region-fields" style="margin-top:12px">
+        <div><label>X</label><input id="rx" type="number" value="0" min="0"></div>
+        <div><label>Y</label><input id="ry" type="number" value="0" min="0"></div>
+        <div><label>W</label><input id="rw" type="number" value="1600" min="1"></div>
+        <div><label>H</label><input id="rh" type="number" value="900" min="1"></div>
       </div>
       <div class="btn-row">
         <button class="primary" id="btn-share" onclick="toggleShare()">Start sharing</button>
@@ -198,154 +208,185 @@
 </main>
 
 <script>
-const serverInput = document.getElementById('server');
-const portInput = document.getElementById('relay-port');
-const streamInput = document.getElementById('stream');
-const statusEl = document.getElementById('status');
+const $ = s => document.getElementById(s);
+const serverInput = $('server');
+const portInput = $('relay-port');
+const streamInput = $('stream');
+const statusEl = $('status');
 
+/* ── theme ──────────────────────────────────────────────────────────── */
+const THEME_KEY = 'lan-share-theme';
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('btn-theme').textContent = t === 'light' ? 'Light' : 'Dark';
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+}
+applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+$('btn-theme').onclick = () =>
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+/* ── helpers ────────────────────────────────────────────────────────── */
 function relay() {
   return { server: serverInput.value.trim(),
            port: portInput.value.trim() || '8501' };
 }
-
-function setStatus(msg, ok) {
-  statusEl.textContent = msg;
-  statusEl.className = ok ? 'ok' : 'err';
-}
-
-function setHero(title, sub) {
-  document.getElementById('hero-title').textContent = title;
-  document.getElementById('hero-sub').textContent = sub;
-}
-
+function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.className = ok ? 'ok' : 'err'; }
+function setHero(title, sub) { $('hero-title').textContent = title; $('hero-sub').textContent = sub; }
 function setRelayPill(text, state) {
-  document.getElementById('pill-relay-text').textContent = text;
-  const d = document.getElementById('dot-relay');
-  d.className = 'dot ' + (state || '');
+  $('pill-relay-text').textContent = text;
+  $('dot-relay').className = 'dot ' + (state || '');
 }
-
 function setSharePill(text, state) {
-  document.getElementById('pill-share-text').textContent = text;
-  const d = document.getElementById('dot-share');
-  d.className = 'dot ' + (state || '');
+  $('pill-share-text').textContent = text;
+  $('dot-share').className = 'dot ' + (state || '');
 }
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+function esc(s) { const d = document.createElement('span'); d.textContent = s; return d.textContent; }
 
+/* ── region toggle ──────────────────────────────────────────────────── */
+$('capture-mode').onchange = e => {
+  $('region-fields').classList.toggle('visible', e.target.value === 'region');
+};
+
+/* ── status ─────────────────────────────────────────────────────────── */
+let _statusTimer = null, _streamsTimer = null;
 async function refreshStatus() {
   let r;
-  try {
-    r = await fetch('/api/status');
-  } catch (e) {
-    setStatus('Cannot reach the local manager: ' + e.message, false);
-    return;
-  }
+  try { r = await fetch('/api/status'); }
+  catch (e) { setStatus('Cannot reach the local manager: ' + e.message, false); return; }
   const s = await r.json();
-  if (s.relay_server) { serverInput.value = s.relay_server; }
+  if (s.relay_server) serverInput.value = s.relay_server;
   portInput.value = s.relay_port;
   if (s.stream) streamInput.value = s.stream;
-  document.getElementById('btn-share').disabled = s.sharing;
-  document.getElementById('btn-stop').disabled = !s.sharing;
-  const shareText = s.sharing ? 'Sharing "' + s.stream + '"' : 'Not sharing.';
-  document.getElementById('share-status').textContent = shareText;
+  $('btn-share').disabled = s.sharing;
+  $('btn-stop').disabled = !s.sharing;
+  $('share-status').textContent = s.sharing ? 'Sharing "' + s.stream + '"' : 'Not sharing.';
   setSharePill(s.sharing ? 'Sharing' : 'Not sharing', s.sharing ? 'ok' : '');
   const state = s.relay_state || 'manual';
-  if (s.sharing) setHero('Sharing "' + s.stream + '"', 'Your screen is live on the relay. Open the streams list to watch it.');
-  else if (state === 'connected' && s.discovered_via === 'lan') setHero('Relay connected', 'Relay found on the LAN at ' + s.relay_server + ':' + s.relay_port + '. Share this screen or pick a stream below.');
-  else if (state === 'connected') setHero('Relay connected', 'Connected to the relay at ' + s.relay_server + ':' + s.relay_port + '.');
-  else if (state === 'unreachable') setHero('Cannot reach the relay', 'The relay server is not responding at ' + s.relay_server + ':' + s.relay_port + '. Start it with: ./scripts/run_server.sh');
-  else setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP address below, or start it with: ./scripts/run_server.sh');
-  if (s.error) {
-    setStatus('Error: ' + s.error, false);
-    setRelayPill('Relay: error', 'err');
-    return;
-  }
-  if (state === 'connected') {
-    setRelayPill('Relay: ' + s.relay_server + ':' + s.relay_port, s.sharing ? 'ok' : '');
-    setStatus('Connected to relay ' + s.relay_server + ':' + s.relay_port, true);
-  } else if (state === 'unreachable') {
-    setRelayPill('Relay: unreachable', 'err');
-  } else if (state === 'discovery-failed') {
-    setRelayPill('Relay: discovery failed', 'err');
-  } else {
-    setRelayPill('Relay: manual server required', 'err');
-  }
+  if (s.sharing) setHero('Sharing "' + s.stream + '"', 'Your screen is live on the relay.');
+  else if (state === 'connected' && s.discovered_via === 'lan')
+    setHero('Relay connected', 'Relay found on the LAN at ' + s.relay_server + ':' + s.relay_port + '.');
+  else if (state === 'connected')
+    setHero('Relay connected', 'Connected to ' + s.relay_server + ':' + s.relay_port + '.');
+  else if (state === 'unreachable')
+    setHero('Cannot reach the relay', 'The relay server is not responding at ' + s.relay_server + ':' + s.relay_port + '.');
+  else setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP below.');
+  if (s.error) { setStatus('Error: ' + s.error, false); setRelayPill('Relay: error', 'err'); return; }
+  if (state === 'connected') { setRelayPill('Relay: ' + s.relay_server + ':' + s.relay_port, s.sharing ? 'ok' : ''); setStatus('Connected to relay ' + s.relay_server + ':' + s.relay_port, true); }
+  else if (state === 'unreachable') setRelayPill('Relay: unreachable', 'err');
+  else setRelayPill('Relay: manual server required', 'err');
 }
 
+/* ── streams ────────────────────────────────────────────────────────── */
+function _ageClass(age) {
+  if (age == null) return '';
+  return age < 5 ? 'age-ok' : 'age-err';
+}
 async function refreshStreams() {
   const { server, port } = relay();
-  const ul = document.getElementById('streams');
+  const ul = $('streams');
   if (!server) {
-    ul.innerHTML = '<li class="muted">Manual server required: enter the relay IP in the Server field first.</li>';
+    ul.replaceChildren(el('li', 'muted', 'Manual server required: enter the relay IP in the Server field first.'));
     setRelayPill('Relay: manual server required', 'err');
-    setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP address in the Server field.');
+    setHero('Manual server required', 'No relay was found on the LAN. Enter the relay PC IP in the Server field.');
     return;
   }
   let r;
   try {
-    r = await fetch('/api/streams?server=' + encodeURIComponent(server)
-                          + '&port=' + encodeURIComponent(port));
+    r = await fetch('/api/streams?server=' + encodeURIComponent(server) + '&port=' + encodeURIComponent(port));
   } catch (e) {
-    document.getElementById('streams').innerHTML =
-      '<li class="muted">Cannot reach server: ' + e.message + '</li>';
+    ul.replaceChildren(el('li', 'muted', 'Cannot reach server: ' + e.message));
     setRelayPill('Relay: unreachable', 'err');
     return;
   }
   const data = await r.json();
   if (data.relay_state === 'unreachable') {
-    ul.innerHTML = '<li class="muted">Cannot reach server: ' + (data.error || 'no reply') + '</li>';
+    ul.replaceChildren(el('li', 'muted', 'Cannot reach server: ' + (data.error || 'no reply')));
     setRelayPill('Relay: unreachable', 'err');
-    setHero('Cannot reach the relay', 'The relay server is not responding at ' + server + ':' + port + '. Start it with: ./scripts/run_server.sh');
+    setHero('Cannot reach the relay', 'The relay is not responding at ' + server + ':' + port + '.');
     return;
   }
-  if (data.error) { ul.innerHTML = '<li class="muted">Cannot reach server: ' + data.error + '</li>'; return; }
-  if (!data.streams.length) { ul.innerHTML = '<li class="muted">No active streams.</li>'; return; }
-  ul.innerHTML = data.streams.map(s =>
-    '<li><span class="stream-live"><span class="dot ok"></span>' + s + '</span>' +
-    '<a href="/watch/' + encodeURIComponent(s)
-    + '?server=' + encodeURIComponent(data.server) + '&port=' + encodeURIComponent(data.port)
-    + '" target="_blank">Watch</a></li>').join('');
+  if (data.error) { ul.replaceChildren(el('li', 'muted', 'Cannot reach server: ' + data.error)); return; }
+  if (!data.streams.length) { ul.replaceChildren(el('li', 'muted', 'No active streams.')); return; }
+  const vc = data.viewer_counts || {};
+  const la = data.last_frame_age || {};
+  const up = data.uptime || {};
+  const frag = document.createDocumentFragment();
+  for (const s of data.streams) {
+    const li = document.createElement('li');
+    const top = el('div', 'stream-top');
+    const live = el('span', 'stream-live');
+    live.append(el('span', 'dot ' + (la[s] != null && la[s] < 5 ? 'ok' : 'err')));
+    live.append(document.createTextNode(esc(s)));
+    top.append(live);
+    const a = document.createElement('a');
+    a.href = '/watch/' + encodeURIComponent(s) + '?server=' + encodeURIComponent(data.server) + '&port=' + encodeURIComponent(data.port);
+    a.target = '_blank';
+    a.textContent = 'Watch';
+    top.append(a);
+    li.append(top);
+    const age = la[s];
+    const viewers = vc[s] || 0;
+    const parts = [viewers + ' watching'];
+    parts.push(age != null ? (age < 5 ? '✓ ' : '⚠ ') + age.toFixed(1) + 's ago' : 'no frames yet');
+    if (up[s] != null) parts.push('up ' + Math.round(up[s]) + 's');
+    const sub = el('div', 'stream-sub');
+    for (let i = 0; i < parts.length; i++) {
+      if (i) sub.appendChild(document.createTextNode(' · '));
+      const sp = document.createElement('span');
+      if (i === 1 && age != null) sp.className = age < 5 ? 'age-ok' : 'age-err';
+      sp.textContent = parts[i];
+      sub.appendChild(sp);
+    }
+    li.append(sub);
+    frag.append(li);
+  }
+  ul.replaceChildren(frag);
   setRelayPill('Relay: ' + data.server + ':' + data.port, '');
 }
 
+/* ── share ──────────────────────────────────────────────────────────── */
 async function toggleShare() {
   const { server, port } = relay();
-  if (!server) {
-    setStatus('Manual server required: enter the relay IP in the Server field first.', false);
-    setRelayPill('Relay: manual server required', 'err');
-    return;
-  }
-  const body = {
-    server, port,
+  if (!server) { setStatus('Manual server required: enter the relay IP.', false); setRelayPill('Relay: manual server required', 'err'); return; }
+  const body = { server, port,
     stream: streamInput.value.trim(),
-    fps: parseFloat(document.getElementById('fps').value) || 10,
-    quality: parseInt(document.getElementById('quality').value) || 80,
+    fps: parseFloat($('fps').value) || 10,
+    quality: parseInt($('quality').value) || 80,
   };
+  if ($('capture-mode').value === 'region')
+    body.region = [parseInt($('rx').value)||0, parseInt($('ry').value)||0,
+                   parseInt($('rw').value)||1600, parseInt($('rh').value)||900];
   let r;
   try {
-    r = await fetch('/api/share/start', {
-      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
-    });
-  } catch (e) {
-    setStatus('Cannot reach the local manager: ' + e.message, false);
-    return;
-  }
+    r = await fetch('/api/share/start', { method: 'POST', headers: {'Content-Type': 'application/json'},
+                                          body: JSON.stringify(body) });
+  } catch (e) { setStatus('Cannot reach the local manager: ' + e.message, false); return; }
   const resp = await r.json();
-  if (resp.error) {
-    setStatus('Share failed: ' + resp.error, false);
-    setRelayPill('Relay: error', 'err');
-    setHero('Cannot reach the relay', 'The relay server is not responding at ' + server + ':' + port + '. Start it with: ./scripts/run_server.sh');
-    return;
-  }
+  if (resp.error) { setStatus('Share failed: ' + resp.error, false); setRelayPill('Relay: error', 'err');
+    setHero('Cannot reach the relay', 'The relay is not responding at ' + server + ':' + port + '.'); return; }
   await refreshStatus();
   setStatus('Sharing started on ' + server + ':' + port, true);
 }
-
 async function stopShare() {
   await fetch('/api/share/stop', { method: 'POST' });
   await refreshStatus();
   setStatus('Sharing stopped.', true);
 }
 
-refreshStatus();
+/* ── auto-refresh timers ────────────────────────────────────────────── */
+let _busy_status = false, _busy_streams = false;
+async function _pollStatus() { if (!_busy_status) { _busy_status = true; try { await refreshStatus(); } catch{} _busy_status = false; } }
+async function _pollStreams() { if (!_busy_streams) { _busy_streams = true; try { await refreshStreams(); } catch{} _busy_streams = false; } }
+setInterval(_pollStatus, 3000);
+setInterval(_pollStreams, 5000);
+_refreshStatus(); function _refreshStatus() { _pollStatus(); }
+_pollStreams();
 </script>
 </body>
 </html>
