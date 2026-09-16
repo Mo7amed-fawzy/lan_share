@@ -911,6 +911,17 @@ class LanShareApp:
                 button = int(evt.get("button", 4))
                 xtest.fake_input(disp, X.ButtonPress, button)
                 xtest.fake_input(disp, X.ButtonRelease, button)
+            elif evt_type == "key":
+                keyval = int(evt.get("keyval", 0))
+                pressed = bool(evt.get("pressed", True))
+                if keyval:
+                    keycode = disp.keysym_to_keycode(keyval)
+                    if keycode:
+                        xtest.fake_input(
+                            disp,
+                            X.KeyPress if pressed else X.KeyRelease,
+                            keycode,
+                        )
             disp.sync()
         except Exception:
             pass
@@ -942,6 +953,7 @@ class LanShareApp:
         self._watch_window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self._watch_window.connect("delete-event", self._on_watch_closed)
         self._watch_window.connect("key-press-event", self._on_watch_key)
+        self._watch_window.connect("key-release-event", self._on_watch_key_release)
         self._watch_window.connect("window-state-event", self._on_watch_state)
 
         overlay = Gtk.Overlay()
@@ -1092,7 +1104,31 @@ class LanShareApp:
                     return True
             self._on_watch_closed()
             return True
-        return False
+        self._send_watch_key(event, True)
+        return self._watch_has_control
+
+    def _on_watch_key_release(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            return False
+        self._send_watch_key(event, False)
+        return self._watch_has_control
+
+    def _send_watch_key(self, event, pressed):
+        if not self._watch_has_control or self._watch_sock is None:
+            return
+        try:
+            protocol.send_message(self._watch_sock, {
+                "type": protocol.CONTROL_INPUT,
+                "stream": self._watch_stream,
+                "evt": {
+                    "type": "key",
+                    "keyval": int(event.keyval),
+                    "state": int(event.state),
+                    "pressed": bool(pressed),
+                },
+            })
+        except OSError:
+            pass
 
     def _on_watch_maximize(self, *args):
         if self._watch_window is None:
@@ -1174,7 +1210,7 @@ class LanShareApp:
         ratio = max(vw / sw, vh / sh)
         rw, rh = sw * ratio, sh * ratio
         src_x = (x + (rw - vw) / 2.0) / rw
-        src_y = (y + (rh - vh) / 2.0) / rh
+        src_y = (y + (rh - vh)) / rh
         if not (0.0 <= src_x <= 1.0 and 0.0 <= src_y <= 1.0):
             return None
         return src_x, src_y
@@ -1255,8 +1291,10 @@ class LanShareApp:
         try:
             scaled = pixbuf.scale_simple(tw, th, GdkPixbuf.InterpType.BILINEAR)
             if (tw, th) != (width, height):
+                # Keep the bottom edge (panel/taskbar) fully visible: crop
+                # any vertical slack from the top instead of centering it.
                 scaled = scaled.new_subpixbuf(
-                    (tw - width) // 2, (th - height) // 2, width, height
+                    (tw - width) // 2, th - height, width, height
                 )
         except Exception:
             return
