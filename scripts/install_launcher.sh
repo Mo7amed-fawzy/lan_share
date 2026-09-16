@@ -4,6 +4,11 @@
 #   --server            : "Lan-Share Relay" server launcher only
 #   --both              : both
 # Adds them to the application menu so no terminal is needed to start them.
+#
+# When the .deb package is installed (/usr/bin/lan-share exists) the system
+# ships proper launchers under /usr/share/applications/, so user-level ones
+# are skipped entirely and any stale copies (which would shadow the system
+# entries and launch old code) are removed.
 set -euo pipefail
 
 MODE=client
@@ -19,6 +24,20 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 APP_DIR="$HOME/.local/share/applications"
 mkdir -p "$APP_DIR"
+
+# Remove any launchers a previous run of this script created, so they never
+# shadow the system .desktop entries (which are the single source of truth
+# when the .deb is installed).
+rm -f "$APP_DIR/lan-share.desktop" "$APP_DIR/lan-share-relay.desktop"
+
+if command -v lan-share >/dev/null 2>&1 || command -v lan-share-relay >/dev/null 2>&1; then
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$APP_DIR" 2>/dev/null || true
+    fi
+    echo "Lan-Share .deb is installed - using the system launchers from the application menu."
+    echo "  (stale user-level launchers in $APP_DIR were removed)"
+    exit 0
+fi
 
 install_client() {
     cat > "$APP_DIR/lan-share.desktop" <<EOF
