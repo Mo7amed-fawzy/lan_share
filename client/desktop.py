@@ -108,6 +108,10 @@ class LanShareApp:
         self.sharing = False
         self._share_stop = threading.Event()
         self._share_thread = None
+        self._share_sock = None
+        self._share_name = ""
+        self._share_region = None
+        self._share_has_control = False
         self._refreshing = False
         self._watch_window = None
         self._watch_image = None
@@ -117,6 +121,9 @@ class LanShareApp:
         self._watch_age_label = None
         self._watch_stop = threading.Event()
         self._watch_thread = None
+        self._watch_stream = None
+        self._watch_sock = None
+        self._watch_has_control = False
         self._relay_proc = None
 
         self._apply_css()
@@ -707,8 +714,15 @@ class LanShareApp:
             except RuntimeError as exc:
                 self._ui_update(self._on_share_failed, str(exc), server, port)
                 return
+            self._share_sock = sock
+            self._share_name = stream
+            self._share_region = region
             self._ui_update(self._on_share_registered, stream, server, port)
             sock.settimeout(None)
+            reader = threading.Thread(
+                target=self._share_reader, args=(sock,), daemon=True
+            )
+            reader.start()
             capture = ScreenCapture(region=region, quality=quality, target_size=SHARE_TARGET)
             seq = 0
             while not self._share_stop.is_set():
@@ -725,12 +739,37 @@ class LanShareApp:
         except (OSError, protocol.ProtocolError) as exc:
             self._ui_update(self._on_share_failed, str(exc), server, port)
         finally:
+            self._share_sock = None
             if sock is not None:
                 try:
                     protocol.send_message(sock, {"type": protocol.BYE})
                 except OSError:
                     pass
                 sock.close()
+
+    def _share_reader(self, sock, timeout=1.0):
+        """Read control messages from the relay on the share connection."""
+        sock.settimeout(timeout)
+        try:
+            while not self._share_stop.is_set():
+                try:
+                    header, _ = protocol.recv_message(sock)
+                except socket.timeout:
+                    continue
+                except (OSError, protocol.ProtocolError):
+                    break
+                self._on_control_message(header)
+        except Exception:
+            pass
+
+    def _on_control_message(self, header):
+        msg_type = header.get("type")
+        if msg_type == protocol.CONTROL_REQUEST:
+            GLib.idle_add(self._show_control_request, header)
+        elif msg_type == protocol.CONTROL_INPUT:
+            self._inject_input(header.get("evt") or {})
+        elif msg_type == protocol.CONTROL_REVOKED:
+            self._share_has_control = False
 
     @staticmethod
     def _wait_ack(sock, expected_type, timeout):
@@ -789,6 +828,89 @@ class LanShareApp:
             ctx.remove_class("danger")
         self.entry_name.set_sensitive(not sharing)
 
+    # -- remote control (sharer side) ------------------------------------
+
+    def _show_control_request(self, header):
+        if not self.sharing:
+            return False
+        host = header.get("viewer_host", "A remote viewer")
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            title="Control request",
+            text='%s wants to control your screen' % host,
+        )
+        dialog.format_secondary_text(
+            "Allow the remote viewer to move your mouse and click on this screen? "
+            "You can press Stop Sharing at any time to take back control."
+        )
+        granted = dialog.run() == Gtk.ResponseType.YES
+        dialog.destroy()
+        self._reply_control(granted, header.get("viewer_id"))
+        return False
+
+    def _reply_control(self, granted, viewer_id):
+        if not self.sharing or self._share_sock is None:
+            return
+        try:
+            protocol.send_message(
+                self._share_sock,
+                {
+                    "type": protocol.CONTROL_GRANTED if granted else protocol.CONTROL_DENIED,
+                    "stream": self._share_name,
+                    "viewer_id": viewer_id,
+                },
+            )
+        except OSError:
+            pass
+
+    def _inject_input(self, evt):
+        """Play back a remote mouse event via XTest on the sharer's screen."""
+        try:
+            from Xlib import X, display
+            from Xlib.ext import xtest
+        except ImportError:
+            return
+        disp = None
+        try:
+            disp = display.Display()
+            root = disp.screen().root
+            region = self._share_region
+            if region:
+                ox, oy, ow, oh = region[0], region[1], region[2], region[3]
+            else:
+                scr = Gdk.Screen.get_default()
+                ox, oy = 0, 0
+                ow, oh = scr.get_width(), scr.get_height()
+            evt_type = evt.get("type")
+            if evt_type == "motion":
+                x = ox + int(float(evt.get("x", 0)) * ow)
+                y = oy + int(float(evt.get("y", 0)) * oh)
+                root.warp_pointer(max(0, x), max(0, y))
+            elif evt_type == "button":
+                button = int(evt.get("button", 1))
+                pressed = bool(evt.get("pressed", True))
+                xtest.fake_input(
+                    disp,
+                    X.ButtonPress if pressed else X.ButtonRelease,
+                    button,
+                )
+            elif evt_type == "scroll":
+                button = int(evt.get("button", 4))
+                xtest.fake_input(disp, X.ButtonPress, button)
+                xtest.fake_input(disp, X.ButtonRelease, button)
+            disp.sync()
+        except Exception:
+            pass
+        finally:
+            if disp is not None:
+                try:
+                    disp.close()
+                except Exception:
+                    pass
+
     # -- watch ------------------------------------------------------------
 
     def _on_watch_clicked(self, button, stream):
@@ -800,6 +922,8 @@ class LanShareApp:
         self._watch_last_pixbuf = None
         self._watch_last_frame_time = None
         self._watch_frame_times = []
+        self._watch_stream = stream
+        self._watch_has_control = False
 
         self._watch_window = Gtk.Window(title="Lan-Share - %s" % stream)
         self._watch_window.set_default_size(1600, 900)
@@ -834,18 +958,27 @@ class LanShareApp:
         header.pack_end(self._watch_age_label, False, False, 0)
         header.pack_end(Gtk.Label(label="·"), False, False, 0)
         header.pack_end(self._watch_fps_label, False, False, 0)
-        close_btn = Gtk.Button(label="Close")
-        close_btn.connect("clicked", self._on_watch_closed)
-        header.pack_end(close_btn, False, False, 0)
-        max_btn = Gtk.Button(label="Fullscreen")
-        max_btn.connect("clicked", self._on_watch_maximize)
-        header.pack_end(max_btn, False, False, 0)
+        self._btn_control = Gtk.Button(label="Request Control")
+        self._btn_control.get_style_context().add_class("primary")
+        self._btn_control.set_sensitive(False)
+        self._btn_control.connect("clicked", self._on_request_control)
+        header.pack_end(self._btn_control, False, False, 0)
         vbox.pack_start(header, False, False, 0)
 
         self._watch_image = Gtk.Image()
         self._watch_image.set_halign(Gtk.Align.FILL)
         self._watch_image.set_valign(Gtk.Align.FILL)
         self._watch_image.connect("size-allocate", self._on_watch_resize)
+        self._watch_image.add_events(
+            Gdk.EventMask.POINTER_MOTION_MASK
+            | Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.SCROLL_MASK
+        )
+        self._watch_image.connect("motion-notify-event", self._on_watch_motion)
+        self._watch_image.connect("button-press-event", self._on_watch_button)
+        self._watch_image.connect("button-release-event", self._on_watch_button_release)
+        self._watch_image.connect("scroll-event", self._on_watch_scroll)
         vbox.pack_start(self._watch_image, True, True, 0)
 
         self._watch_msg = Gtk.Label(label="")
@@ -890,6 +1023,111 @@ class LanShareApp:
     def _on_watch_state(self, widget, event):
         return False
 
+    # -- remote control (viewer side) ------------------------------------
+
+    def _on_request_control(self, button):
+        if self._watch_sock is None or not self._watch_stream:
+            return
+        if self._watch_has_control:
+            self._watch_has_control = False
+            self._btn_control.set_label("Request Control")
+            try:
+                protocol.send_message(self._watch_sock, {
+                    "type": protocol.CONTROL_REVOKED,
+                    "stream": self._watch_stream,
+                })
+            except OSError:
+                pass
+            self._watch_msg.set_visible(False)
+            return
+        self._btn_control.set_sensitive(False)
+        self._btn_control.set_label("Requesting…")
+        try:
+            protocol.send_message(self._watch_sock, {
+                "type": protocol.CONTROL_REQUEST,
+                "stream": self._watch_stream,
+            })
+        except OSError as exc:
+            self._watch_control_state(False, "Failed to send control request: %s" % exc)
+
+    def _watch_control_state(self, granted, message=None):
+        self._watch_has_control = granted
+        self._btn_control.set_sensitive(True)
+        self._btn_control.set_label("Release Control" if granted else "Request Control")
+        if self._btn_control.get_style_context().has_class("danger"):
+            self._btn_control.get_style_context().remove_class("danger")
+        if granted:
+            self._btn_control.get_style_context().add_class("danger")
+        if message and self._watch_msg is not None:
+            self._watch_msg.set_text(message)
+            self._watch_msg.set_visible(True)
+
+    def _send_control_input(self, evt):
+        if not self._watch_has_control or self._watch_sock is None:
+            return
+        try:
+            protocol.send_message(self._watch_sock, {
+                "type": protocol.CONTROL_INPUT,
+                "stream": self._watch_stream,
+                "evt": evt,
+            })
+        except OSError:
+            pass
+
+    def _on_watch_motion(self, widget, event):
+        if not self._watch_has_control:
+            return False
+        alloc = widget.get_allocation()
+        if alloc.width <= 1 or alloc.height <= 1:
+            return False
+        self._send_control_input({
+            "type": "motion",
+            "x": event.x / alloc.width,
+            "y": event.y / alloc.height,
+        })
+        return False
+
+    def _on_watch_button(self, widget, event):
+        if not self._watch_has_control:
+            return False
+        alloc = widget.get_allocation()
+        self._send_control_input({
+            "type": "button",
+            "button": event.button,
+            "pressed": True,
+            "x": (event.x / alloc.width) if alloc.width > 1 else 0,
+            "y": (event.y / alloc.height) if alloc.height > 1 else 0,
+        })
+        return True
+
+    def _on_watch_button_release(self, widget, event):
+        if not self._watch_has_control:
+            return False
+        self._send_control_input({
+            "type": "button",
+            "button": event.button,
+            "pressed": False,
+        })
+        return True
+
+    def _on_watch_scroll(self, widget, event):
+        if not self._watch_has_control:
+            return False
+        direction = event.direction
+        button = None
+        if direction == Gdk.ScrollDirection.UP:
+            button = 4
+        elif direction == Gdk.ScrollDirection.DOWN:
+            button = 5
+        elif direction == Gdk.ScrollDirection.SMOOTH:
+            if event.delta_y < 0:
+                button = 4
+            elif event.delta_y > 0:
+                button = 5
+        if button:
+            self._send_control_input({"type": "scroll", "button": button})
+        return False
+
     def _set_watch_pixbuf(self, pixbuf):
         """Scale the frame to fill the whole screen edge-to-edge.
 
@@ -929,6 +1167,8 @@ class LanShareApp:
             except RuntimeError as exc:
                 self._ui_update(self._watch_fail, "Cannot watch '%s': %s" % (stream, exc))
                 return
+            self._watch_sock = sock
+            self._ui_update(self._enable_control_button)
             sock.settimeout(NO_FRAME_TIMEOUT)
             while not self._watch_stop.is_set():
                 try:
@@ -943,11 +1183,27 @@ class LanShareApp:
                     return
                 except (OSError, protocol.ProtocolError):
                     break
-                if header.get("type") == protocol.ERROR:
+                msg_type = header.get("type")
+                if msg_type == protocol.ERROR:
                     self._ui_update(self._watch_fail, "Stream not available: %s"
                                     % header.get("reason", "unknown"))
                     break
-                if header.get("type") == protocol.FRAME and payload:
+                if msg_type == protocol.CONTROL_GRANTED:
+                    self._ui_update(self._watch_control_state, True)
+                    continue
+                if msg_type == protocol.CONTROL_DENIED:
+                    self._ui_update(
+                        self._watch_control_state, False,
+                        "Control request was denied by the host.",
+                    )
+                    continue
+                if msg_type == protocol.CONTROL_REVOKED:
+                    self._ui_update(
+                        self._watch_control_state, False,
+                        "Control was revoked by the host.",
+                    )
+                    continue
+                if msg_type == protocol.FRAME and payload:
                     now = time.monotonic()
                     self._watch_last_frame_time = now
                     self._watch_frame_times.append(now)
@@ -960,8 +1216,15 @@ class LanShareApp:
             self._ui_update(self._watch_fail, "Lost connection to the relay at %s:%s"
                             % (self.server, self.port))
         finally:
+            if self._watch_has_control:
+                self._watch_has_control = False
+            self._watch_sock = None
             if sock is not None:
                 sock.close()
+
+    def _enable_control_button(self):
+        if self._btn_control is not None:
+            self._btn_control.set_sensitive(True)
 
     def _watch_tick(self):
         if self._watch_stop.is_set() or self._watch_window is None:
@@ -1018,12 +1281,24 @@ class LanShareApp:
         if self._watch_thread is not None:
             self._watch_thread.join(timeout=2)
             self._watch_thread = None
+        if self._watch_has_control and self._watch_sock is not None:
+            try:
+                protocol.send_message(self._watch_sock, {
+                    "type": protocol.CONTROL_REVOKED,
+                    "stream": self._watch_stream or "",
+                })
+            except OSError:
+                pass
+        self._watch_has_control = False
+        self._watch_sock = None
+        self._watch_stream = None
         if self._watch_window is not None:
             self._watch_window.destroy()
             self._watch_window = None
             self._watch_image = None
             self._watch_msg = None
             self._watch_live_dot = None
+            self._btn_control = None
             self._watch_last_pixbuf = None
         return True
 

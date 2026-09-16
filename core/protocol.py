@@ -27,6 +27,11 @@ FRAME = "frame"
 PING = "ping"
 PONG = "pong"
 BYE = "bye"
+CONTROL_REQUEST = "control_request"
+CONTROL_GRANTED = "control_granted"
+CONTROL_DENIED = "control_denied"
+CONTROL_REVOKED = "control_revoked"
+CONTROL_INPUT = "control_input"
 ERROR = "error"
 
 # ERROR "reason" values

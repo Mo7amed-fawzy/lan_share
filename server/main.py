@@ -22,15 +22,18 @@ logger = logging.getLogger("lan-share.server")
 class Client:
     """A connected peer tracked by the server."""
 
+    _next_id = 0
+    _id_lock = threading.Lock()
+
     def __init__(self, sock, addr):
         self.sock = sock
         self.addr = addr
         self.stream = None
         self.is_sharer = False
         self.generation = 0
-        # Queue items are (is_frame, header, payload). Frames are tagged so a
-        # slow viewer's stale frames can be dropped without losing control
-        # messages such as SUBSCRIBED / PONG / stream notifications.
+        with Client._id_lock:
+            Client._next_id += 1
+            self.client_id = Client._next_id
         self._queue = queue.Queue(maxsize=60)
         self._closed = False
 
@@ -115,6 +118,7 @@ class ShareServer:
         self._stream_started = {}         # stream -> monotonic time share began
         self._last_frame_time = {}        # stream -> monotonic time of newest frame
         self._stream_meta = {}            # stream -> {host, addr, fps, size}
+        self._control_owner = {}          # stream -> client_id of viewer with control
         self._running = True
         self._server_sock = None
         self._discovery = discovery.DiscoveryResponder(relay_port=port)
@@ -231,6 +235,12 @@ class ShareServer:
         elif msg_type == protocol.BYE:
             self._unregister(client)
             client.close()
+        elif msg_type in (
+            protocol.CONTROL_REQUEST, protocol.CONTROL_GRANTED,
+            protocol.CONTROL_DENIED, protocol.CONTROL_REVOKED,
+            protocol.CONTROL_INPUT,
+        ):
+            self._route_control(client, header)
 
     def _register_sharer(self, client, header):
         stream = header.get("stream")
@@ -245,6 +255,7 @@ class ShareServer:
                 self._unregister_locked(old, broadcast=False)
             generation = self._stream_gen.get(stream, 0) + 1
             self._stream_gen[stream] = generation
+            self._control_owner.pop(stream, None)
             client.stream = stream
             client.is_sharer = True
             client.generation = generation
@@ -316,6 +327,56 @@ class ShareServer:
         for viewer in viewers:
             viewer.enqueue_latest(*frame)
 
+    def _route_control(self, client, header):
+        """Route control messages between viewer and sharer."""
+        msg_type = header.get("type")
+        stream = client.stream
+        if stream is None:
+            return
+        with self._lock:
+            if msg_type == protocol.CONTROL_REQUEST:
+                sharer = self._sharers.get(stream)
+                if sharer is None:
+                    client.send({"type": protocol.CONTROL_DENIED, "reason": "no_sharer"})
+                    return
+                self._control_owner[stream] = client.client_id
+                sharer.send({
+                    "type": protocol.CONTROL_REQUEST,
+                    "viewer_id": client.client_id,
+                    "viewer_host": client.addr[0],
+                    "stream": stream,
+                })
+                logger.info(
+                    "control request from viewer %d (%s) for %s",
+                    client.client_id, client.addr, stream,
+                )
+            elif msg_type in (protocol.CONTROL_GRANTED, protocol.CONTROL_DENIED):
+                owner_id = self._control_owner.get(stream)
+                if msg_type == protocol.CONTROL_DENIED:
+                    self._control_owner.pop(stream, None)
+                for v in self._viewers.get(stream, ()):
+                    if v.client_id == owner_id:
+                        v.send({
+                            "type": msg_type,
+                            "stream": stream,
+                        })
+                        break
+            elif msg_type == protocol.CONTROL_REVOKED:
+                self._control_owner.pop(stream, None)
+                for v in self._viewers.get(stream, ()):
+                    v.send({"type": protocol.CONTROL_REVOKED, "stream": stream})
+                sharer = self._sharers.get(stream)
+                if sharer:
+                    sharer.send({"type": protocol.CONTROL_REVOKED, "stream": stream})
+                logger.info("control revoked for %s", stream)
+            elif msg_type == protocol.CONTROL_INPUT:
+                owner_id = self._control_owner.get(stream)
+                if owner_id != client.client_id:
+                    return
+                sharer = self._sharers.get(stream)
+                if sharer:
+                    sharer.send(header)
+
     def _unregister(self, client):
         with self._lock:
             self._unregister_locked(client)
@@ -332,10 +393,16 @@ class ShareServer:
             self._stream_gen.pop(stream, None)
             self._stream_started.pop(stream, None)
             self._stream_meta.pop(stream, None)
+            self._control_owner.pop(stream, None)
             logger.info("sharer left: %s (%s)", stream, client.addr)
         viewers = self._viewers.get(stream)
         if viewers and client in viewers:
             viewers.discard(client)
+            if self._control_owner.get(stream) == client.client_id:
+                self._control_owner.pop(stream, None)
+                sharer = self._sharers.get(stream)
+                if sharer:
+                    sharer.send({"type": protocol.CONTROL_REVOKED, "stream": stream})
         if viewers is not None and not viewers:
             self._viewers.pop(stream, None)
         client.stream = None

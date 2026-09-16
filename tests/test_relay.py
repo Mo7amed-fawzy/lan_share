@@ -257,5 +257,92 @@ class TestHealth(RelayTestBase):
         sharer.close()
 
 
+class TestRemoteControl(RelayTestBase):
+    def test_control_request_grant_and_input(self):
+        sharer = self.register_sharer("desk")
+        viewer = self.subscribe("desk")
+        sharer.settimeout(3.0)
+        viewer.settimeout(3.0)
+
+        protocol.send_message(viewer, {"type": protocol.CONTROL_REQUEST, "stream": "desk"})
+        req, _ = recv_type(sharer, protocol.CONTROL_REQUEST, timeout=3.0)
+        self.assertEqual(req["stream"], "desk")
+        self.assertTrue(req.get("viewer_id"))
+        self.assertTrue(req.get("viewer_host"))
+
+        protocol.send_message(
+            sharer,
+            {"type": protocol.CONTROL_GRANTED, "stream": "desk",
+             "viewer_id": req["viewer_id"]},
+        )
+        granted, _ = recv_type(viewer, protocol.CONTROL_GRANTED, timeout=3.0)
+        self.assertEqual(granted["stream"], "desk")
+
+        protocol.send_message(
+            viewer,
+            {"type": protocol.CONTROL_INPUT, "stream": "desk",
+             "evt": {"type": "motion", "x": 0.5, "y": 0.5}},
+        )
+        evt, _ = recv_type(sharer, protocol.CONTROL_INPUT, timeout=3.0)
+        self.assertEqual(evt["evt"]["x"], 0.5)
+        self.assertEqual(evt["evt"]["y"], 0.5)
+
+        viewer.close()
+        sharer.close()
+
+    def test_control_denied_and_input_dropped(self):
+        sharer = self.register_sharer("desk")
+        viewer = self.subscribe("desk")
+        sharer.settimeout(3.0)
+        viewer.settimeout(3.0)
+
+        protocol.send_message(viewer, {"type": protocol.CONTROL_REQUEST, "stream": "desk"})
+        req, _ = recv_type(sharer, protocol.CONTROL_REQUEST, timeout=3.0)
+        protocol.send_message(
+            sharer,
+            {"type": protocol.CONTROL_DENIED, "stream": "desk",
+             "viewer_id": req["viewer_id"]},
+        )
+        denied, _ = recv_type(viewer, protocol.CONTROL_DENIED, timeout=3.0)
+        self.assertEqual(denied["stream"], "desk")
+
+        protocol.send_message(
+            viewer,
+            {"type": protocol.CONTROL_INPUT, "stream": "desk",
+             "evt": {"type": "motion", "x": 0.1, "y": 0.1}},
+        )
+        sharer.settimeout(1.0)
+        with self.assertRaises(socket.timeout):
+            protocol.recv_message(sharer)
+
+        viewer.close()
+        sharer.close()
+
+    def test_control_revoked_broadcast(self):
+        sharer = self.register_sharer("desk")
+        viewer = self.subscribe("desk")
+        sharer.settimeout(3.0)
+        viewer.settimeout(3.0)
+
+        protocol.send_message(viewer, {"type": protocol.CONTROL_REQUEST, "stream": "desk"})
+        recv_type(sharer, protocol.CONTROL_REQUEST, timeout=3.0)
+
+        protocol.send_message(viewer, {"type": protocol.CONTROL_REVOKED, "stream": "desk"})
+        rev, _ = recv_type(sharer, protocol.CONTROL_REVOKED, timeout=3.0)
+        self.assertEqual(rev["stream"], "desk")
+
+        protocol.send_message(
+            viewer,
+            {"type": protocol.CONTROL_INPUT, "stream": "desk",
+             "evt": {"type": "motion", "x": 0.2, "y": 0.2}},
+        )
+        sharer.settimeout(1.0)
+        with self.assertRaises(socket.timeout):
+            protocol.recv_message(sharer)
+
+        viewer.close()
+        sharer.close()
+
+
 if __name__ == "__main__":
     unittest.main()
