@@ -59,9 +59,17 @@ def run_share(args):
     sock = _connect(args.server, args.port)
     capture = ScreenCapture(region=args.region, scale=args.scale, quality=args.quality)
     try:
+        width, height = capture.output_size()
         protocol.send_message(
             sock,
-            {"type": protocol.SHARER_HELLO, "stream": args.stream, "host": args.name},
+            {
+                "type": protocol.SHARER_HELLO,
+                "stream": args.stream,
+                "host": args.name,
+                "fps": args.fps,
+                "width": width,
+                "height": height,
+            },
         )
         try:
             _wait_ack(sock, protocol.SHARER_REGISTERED, REGISTER_TIMEOUT)

@@ -88,8 +88,17 @@ class ShareManager:
         sock = None
         try:
             sock = socket.create_connection((server, port), timeout=5)
+            width, height = capture.output_size()
             protocol.send_message(
-                sock, {"type": protocol.SHARER_HELLO, "stream": stream, "host": name}
+                sock,
+                {
+                    "type": protocol.SHARER_HELLO,
+                    "stream": stream,
+                    "host": name,
+                    "fps": fps,
+                    "width": width,
+                    "height": height,
+                },
             )
             try:
                 self._wait_ack(sock, protocol.SHARER_REGISTERED, REGISTER_TIMEOUT)
@@ -150,6 +159,10 @@ class ShareManager:
                 "viewer_counts": header.get("viewer_counts", {}),
                 "last_frame_age": header.get("last_frame_age", {}),
                 "uptime": header.get("uptime", {}),
+                "hosts": header.get("hosts", {}),
+                "addresses": header.get("addresses", {}),
+                "fps": header.get("fps", {}),
+                "sizes": header.get("sizes", {}),
             }
             return header.get("streams", []), meta
         finally:

@@ -114,6 +114,7 @@ class ShareServer:
         self._stream_gen = {}             # stream -> generation counter
         self._stream_started = {}         # stream -> monotonic time share began
         self._last_frame_time = {}        # stream -> monotonic time of newest frame
+        self._stream_meta = {}            # stream -> {host, addr, fps, size}
         self._running = True
         self._server_sock = None
         self._discovery = discovery.DiscoveryResponder(relay_port=port)
@@ -195,18 +196,31 @@ class ShareServer:
                 viewer_counts = {}
                 last_frame_age = {}
                 uptime = {}
+                hosts = {}
+                addresses = {}
+                fps = {}
+                sizes = {}
                 for s in streams:
                     viewer_counts[s] = len(self._viewers.get(s, ()))
                     started = self._stream_started.get(s)
                     uptime[s] = round(now - started, 1) if started is not None else None
                     last = self._last_frame_time.get(s)
                     last_frame_age[s] = round(now - last, 1) if last is not None else None
+                    meta = self._stream_meta.get(s) or {}
+                    hosts[s] = meta.get("host") or s
+                    addresses[s] = meta.get("addr") or ""
+                    fps[s] = meta.get("fps")
+                    sizes[s] = meta.get("size")
             client.send({
                 "type": protocol.STREAM_LIST_RESP,
                 "streams": streams,
                 "viewer_counts": viewer_counts,
                 "last_frame_age": last_frame_age,
                 "uptime": uptime,
+                "hosts": hosts,
+                "addresses": addresses,
+                "fps": fps,
+                "sizes": sizes,
             })
         elif msg_type == protocol.SUBSCRIBE:
             self._subscribe(client, header)
@@ -237,6 +251,14 @@ class ShareServer:
             self._sharers[stream] = client
             self._stream_started[stream] = time.monotonic()
             self._viewers.setdefault(stream, set())
+            width = header.get("width") or 1600
+            height = header.get("height") or 900
+            self._stream_meta[stream] = {
+                "host": header.get("host") or stream,
+                "addr": client.addr[0],
+                "fps": header.get("fps"),
+                "size": [width, height],
+            }
         client.send({"type": protocol.SHARER_REGISTERED, "stream": stream})
         if replaced:
             logger.info("sharer replaced for %s: %s", stream, client.addr)
@@ -309,6 +331,7 @@ class ShareServer:
             self._last_frame_time.pop(stream, None)
             self._stream_gen.pop(stream, None)
             self._stream_started.pop(stream, None)
+            self._stream_meta.pop(stream, None)
             logger.info("sharer left: %s (%s)", stream, client.addr)
         viewers = self._viewers.get(stream)
         if viewers and client in viewers:

@@ -216,14 +216,15 @@ class LanShareApp:
         self._set_pill(self.pill_relay, state, text if text.startswith("Relay") else "Relay")
 
     def _set_hero(self, title, sub):
-        self.hero_title.set_text(title)
-        self.hero_sub.set_text(sub)
+        self.status_bar.set_text(title)
+        if hasattr(self, "share_status"):
+            self.share_status.set_text(sub)
 
     # -- UI construction --------------------------------------------------
 
     def _build_ui(self):
         self.window = Gtk.Window(title="Lan-Share")
-        self.window.set_default_size(880, 640)
+        self.window.set_default_size(1120, 700)
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.connect("destroy", Gtk.main_quit)
 
@@ -232,7 +233,9 @@ class LanShareApp:
 
         root.pack_start(self._build_header(), False, False, 0)
         root.pack_start(self._build_content(), True, True, 0)
-        self.status_bar = Gtk.Label(label="", xalign=0)
+        self.status_bar = Gtk.Label(
+            label="Idle  •  Ready to share or connect", xalign=0
+        )
         self.status_bar.set_name("status-bar")
         root.pack_start(self.status_bar, False, False, 0)
 
@@ -269,114 +272,124 @@ class LanShareApp:
         return header
 
     def _build_content(self):
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         content.get_style_context().add_class("content")
-        scrolled.add(content)
 
-        content.pack_start(self._build_hero(), False, False, 0)
-        content.pack_start(self._build_share_card(), False, False, 0)
-        content.pack_start(self._build_sessions_card(), False, False, 0)
-        return scrolled
+        left = self._build_host_card()
+        right = self._build_sessions_card()
+        left.set_hexpand(True)
+        right.set_hexpand(True)
+        content.pack_start(left, True, True, 0)
+        content.pack_start(right, True, True, 0)
+        return content
 
-    def _build_hero(self):
-        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        hero.set_valign(Gtk.Align.CENTER)
-        hero.set_margin_top(28)
-        hero.set_margin_bottom(24)
-        hero.set_margin_start(20)
-        hero.set_margin_end(20)
-        icon = MonitorIcon(72)
-        icon.set_halign(Gtk.Align.CENTER)
-        hero.pack_start(icon, False, False, 0)
-        self.hero_title = Gtk.Label(label="Connect to a host first")
-        self.hero_title.get_style_context().add_class("hero-title")
-        self.hero_title.set_halign(Gtk.Align.CENTER)
-        self.hero_title.set_justify(Gtk.Justification.CENTER)
-        self.hero_sub = Gtk.Label(label="Start the relay server, then share this screen or pick a session.")
-        self.hero_sub.get_style_context().add_class("hero-sub")
-        self.hero_sub.set_halign(Gtk.Align.CENTER)
-        self.hero_sub.set_justify(Gtk.Justification.CENTER)
-        hero.pack_start(self.hero_title, False, False, 0)
-        hero.pack_start(self.hero_sub, False, False, 0)
-        return hero
-
-    def _build_share_card(self):
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    def _build_host_card(self):
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.get_style_context().add_class("card")
-        card.set_margin_start(20)
-        card.set_margin_end(20)
-        card.set_margin_top(4)
-        card.set_margin_bottom(16)
 
-        title = Gtk.Label(label="SHARE THIS SESSION", xalign=0)
+        title = Gtk.Label(label="Broadcast / Host", xalign=0)
         title.get_style_context().add_class("card-title")
         card.pack_start(title, False, False, 0)
 
         self.entry_name = self._new_entry(socket.gethostname(), width=20)
-        self.entry_server = self._new_entry(self.server, width=16)
-        self.entry_port = self._new_entry(str(self.port), width=6)
-        self.entry_fps = self._new_entry("10", width=5)
-        self.entry_quality = self._new_entry("80", width=5)
+        card.pack_start(self._field_row("Session name", self.entry_name), False, False, 0)
 
-        row1 = Gtk.Box(spacing=12)
-        row1.pack_start(self._field_row("Session name (default: PC name)", self.entry_name), True, True, 0)
-        row1.pack_start(self._field_row("Server IP", self.entry_server), False, False, 0)
-        row1.pack_start(self._field_row("Port", self.entry_port), False, False, 0)
-        card.pack_start(row1, False, False, 0)
-
-        row2 = Gtk.Box(spacing=12)
-        row2.pack_start(self._field_row("FPS", self.entry_fps), False, False, 0)
-        row2.pack_start(self._field_row("Quality (1-100)", self.entry_quality), False, False, 0)
-        row2.pack_start(self._field_row("Capture", self._build_capture_combo()), True, True, 0)
-        card.pack_start(row2, False, False, 0)
-
-        self._region_box = Gtk.Box(spacing=12)
-        self._region_box.set_no_show_all(True)
-        self._region_box.set_visible(False)
-        sp_x = self._new_entry("0", width=5); sp_y = self._new_entry("0", width=5)
-        sp_w = self._new_entry("1600", width=5); sp_h = self._new_entry("900", width=5)
-        self._region_fields = (sp_x, sp_y, sp_w, sp_h)
-        for lbl, sp in [("X", sp_x), ("Y", sp_y), ("W", sp_w), ("H", sp_h)]:
-            self._region_box.pack_start(self._field_row(lbl, sp), False, False, 0)
-        card.pack_start(self._region_box, False, False, 0)
+        self.combo_capture = self._build_capture_combo()
+        card.pack_start(self._field_row("Capture source", self.combo_capture), False, False, 0)
 
         self._window_box = Gtk.Box(spacing=12)
         self._window_box.set_no_show_all(True)
         self._window_box.set_visible(False)
         self.combo_window = Gtk.ComboBoxText()
         self.combo_window.append("none", "(click Refresh)")
-        btn_refresh = Gtk.Button(label="Refresh")
-        btn_refresh.get_style_context().add_class("small")
-        btn_refresh.connect("clicked", self._refresh_windows)
+        btn_win = Gtk.Button(label="Refresh")
+        btn_win.get_style_context().add_class("small")
+        btn_win.connect("clicked", self._refresh_windows)
         self._window_box.pack_start(self._field_row("Window", self.combo_window), True, True, 0)
-        self._window_box.pack_start(btn_refresh, False, False, 0)
+        self._window_box.pack_start(btn_win, False, False, 0)
         card.pack_start(self._window_box, False, False, 0)
 
-        buttons = Gtk.Box(spacing=10)
-        self.btn_share = Gtk.Button(label="Start sharing")
-        self.btn_share.get_style_context().add_class("primary")
-        self.btn_share.connect("clicked", self._on_share_clicked)
-        self.btn_stop = Gtk.Button(label="Stop")
-        self.btn_stop.get_style_context().add_class("danger")
-        self.btn_stop.set_sensitive(False)
-        self.btn_stop.connect("clicked", self._on_stop_clicked)
+        self._region_box = Gtk.Box(spacing=8)
+        self._region_box.set_no_show_all(True)
+        self._region_box.set_visible(False)
+        sp_x = self._new_entry("0", width=4); sp_y = self._new_entry("0", width=4)
+        sp_w = self._new_entry("1600", width=5); sp_h = self._new_entry("900", width=5)
+        self._region_fields = (sp_x, sp_y, sp_w, sp_h)
+        for lbl, sp in [("X", sp_x), ("Y", sp_y), ("W", sp_w), ("H", sp_h)]:
+            self._region_box.pack_start(self._field_row(lbl, sp), True, True, 0)
+        card.pack_start(self._region_box, False, False, 0)
+
+        perf = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        perf_title = Gtk.Label(label="Performance", xalign=0)
+        perf_title.get_style_context().add_class("field")
+        perf.pack_start(perf_title, False, False, 0)
+
+        fps_row = Gtk.Box(spacing=4)
+        fps_row.get_style_context().add_class("segmented")
+        self._fps_buttons = []
+        self._fps_value = 30
+        for i, val in enumerate((15, 30, 60)):
+            btn = Gtk.ToggleButton(label=str(val))
+            btn.get_style_context().add_class("seg")
+            btn.set_active(i == 1)
+            btn.connect("toggled", self._on_fps_toggled, val)
+            fps_row.pack_start(btn, True, True, 0)
+            self._fps_buttons.append(btn)
+        perf.pack_start(fps_row, False, False, 0)
+
+        self.scale_quality = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 1, 100, 1
+        )
+        self.scale_quality.set_value(80)
+        self.scale_quality.set_hexpand(True)
+        self.scale_quality.set_draw_value(False)
+        self.scale_quality.connect("value-changed", self._on_quality_changed)
+        self.lbl_quality = Gtk.Label(label="80%", xalign=0)
+        self.lbl_quality.set_name("quality-label")
+        qrow = Gtk.Box(spacing=10)
+        qrow.pack_start(Gtk.Label(label="Quality", xalign=0), False, False, 0)
+        qrow.pack_start(self.scale_quality, True, True, 0)
+        qrow.pack_start(self.lbl_quality, False, False, 0)
+        perf.pack_start(qrow, False, False, 0)
+        card.pack_start(perf, False, False, 0)
+
+        self.entry_server = self._new_entry(self.server, width=14)
+        self.entry_port = self._new_entry(str(self.port), width=6)
+        srv_row = Gtk.Box(spacing=12)
+        srv_row.pack_start(self._field_row("Server IP", self.entry_server), True, True, 0)
+        srv_row.pack_start(self._field_row("Port", self.entry_port), False, False, 0)
+        card.pack_start(srv_row, False, False, 0)
+
+        self.btn_cta = Gtk.Button(label="Start sharing")
+        self.btn_cta.get_style_context().add_class("primary")
+        self.btn_cta.set_hexpand(True)
+        self.btn_cta.connect("clicked", self._on_cta_clicked)
+        card.pack_start(self.btn_cta, False, False, 0)
+
         self.btn_relay = Gtk.Button(label="Start local relay")
+        self.btn_relay.set_hexpand(True)
         self.btn_relay.connect("clicked", self._on_start_relay_clicked)
-        buttons.pack_start(self.btn_share, False, False, 0)
-        buttons.pack_start(self.btn_stop, False, False, 0)
-        buttons.pack_start(self.btn_relay, False, False, 0)
-        card.pack_start(buttons, False, False, 0)
+        card.pack_start(self.btn_relay, False, False, 0)
 
         self.share_status = Gtk.Label(label="Not sharing.", xalign=0)
         self.share_status.set_name("share-status")
         card.pack_start(self.share_status, False, False, 0)
         return card
 
+    def _on_fps_toggled(self, button, value):
+        if button.get_active():
+            self._fps_value = value
+            for other in self._fps_buttons:
+                if other is not button:
+                    other.set_active(False)
+
+    def _on_quality_changed(self, scale):
+        self.lbl_quality.set_text("%d%%" % round(scale.get_value()))
+
     def _build_capture_combo(self):
         self.combo_capture = Gtk.ComboBoxText()
-        self.combo_capture.append("full", "Full screen")
+        self.combo_capture.append("full", "Full screen (all monitors)")
+        self.combo_capture.append("primary", "Primary monitor")
         self.combo_capture.append("window", "Window")
         self.combo_capture.append("region", "Region")
         self.combo_capture.set_active_id("full")
@@ -421,6 +434,10 @@ class LanShareApp:
 
     def _capture_region(self):
         mode = self.combo_capture.get_active_id()
+        if mode == "primary":
+            scr = Gdk.Screen.get_default()
+            geo = scr.get_primary_monitor().get_geometry()
+            return (geo.x, geo.y, geo.width, geo.height)
         if mode == "region":
             try:
                 x = int(self._region_fields[0].get_text().strip())
@@ -439,25 +456,34 @@ class LanShareApp:
                     return (w["x"], w["y"], w["w"], w["h"])
         return None
 
+    def _capture_size(self, region):
+        if not region:
+            return SHARE_TARGET
+        w, h = region[2], region[3]
+        ratio = min(SHARE_TARGET[0] / max(w, 1), SHARE_TARGET[1] / max(h, 1))
+        return (max(1, round(w * ratio)), max(1, round(h * ratio)))
+
     def _build_sessions_card(self):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.get_style_context().add_class("card")
-        card.set_margin_start(20)
-        card.set_margin_end(20)
-        card.set_margin_bottom(20)
 
-        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        title = Gtk.Label(label="SESSIONS ON THE RELAY", xalign=0)
+        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title = Gtk.Label(label="Available Sessions", xalign=0, hexpand=True)
         title.get_style_context().add_class("card-title")
-        head.pack_start(title, False, False, 0)
+        head.pack_start(title, True, True, 0)
         refresh = Gtk.Button(label="Refresh")
         refresh.connect("clicked", self._on_refresh_clicked)
         head.pack_end(refresh, False, False, 0)
         card.pack_start(head, False, False, 0)
 
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
         self.listbox = Gtk.ListBox()
         self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        card.pack_start(self.listbox, False, False, 0)
+        self.listbox.get_style_context().add_class("session-list")
+        scroll.add(self.listbox)
+        card.pack_start(scroll, True, True, 0)
         return card
 
     # -- sessions refresh -------------------------------------------------
@@ -477,6 +503,10 @@ class LanShareApp:
                 "viewer_counts": header.get("viewer_counts", {}),
                 "last_frame_age": header.get("last_frame_age", {}),
                 "uptime": header.get("uptime", {}),
+                "hosts": header.get("hosts", {}),
+                "addresses": header.get("addresses", {}),
+                "fps": header.get("fps", {}),
+                "sizes": header.get("sizes", {}),
             }
             return streams, meta
         finally:
@@ -535,22 +565,29 @@ class LanShareApp:
             label.set_margin_bottom(12)
             self.listbox.add(label)
             self._set_pill(self.pill_relay, "dot-err", "Relay: unreachable")
-            self._set_hero("Cannot reach the relay", "The relay server is not responding at %s:%s. Start it with: ./scripts/run_server.sh" % (self.server, self.port))
+            self._set_hero(
+                "Relay unreachable",
+                "The relay server is not responding at %s:%s. Start it with: ./scripts/run_server.sh"
+                % (self.server, self.port),
+            )
             return
         if not streams:
             self._set_pill(self.pill_relay, "dot", "Relay: %s:%s" % (self.server, self.port))
-            if not self.sharing:
-                self._set_hero("Ready", "Share this screen with a session name, or watch a session below.")
+            if self.sharing and getattr(self, "_share_name", ""):
+                self._set_hero('Sharing "%s"' % self._share_name, "Your screen is live on the relay.")
+            else:
+                self._set_hero("Idle  •  Ready to share or connect", "No sessions on the relay yet.")
             return
         for stream in streams:
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            row.set_margin_start(10); row.set_margin_end(10)
-            row.set_margin_top(7);   row.set_margin_bottom(7)
-            top = Gtk.Box(spacing=10)
+            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            row.get_style_context().add_class("session-card")
+            top = Gtk.Box(spacing=8)
             dot = self._new_dot("dot-ok")
-            dot.set_margin_top(5)
+            dot.set_margin_top(6)
             name = Gtk.Label(label=stream, xalign=0, hexpand=True)
+            name.get_style_context().add_class("session-name")
             view_btn = Gtk.Button(label="Watch")
+            view_btn.get_style_context().add_class("watch-btn")
             view_btn.connect("clicked", self._on_watch_clicked, stream)
             top.pack_start(dot, False, False, 0)
             top.pack_start(name, True, True, 0)
@@ -558,26 +595,44 @@ class LanShareApp:
             viewers = meta.get("viewer_counts", {}).get(stream, 0)
             age = meta.get("last_frame_age", {}).get(stream)
             up  = meta.get("uptime", {}).get(stream)
-            parts = ["%d watching" % viewers]
+            host = meta.get("hosts", {}).get(stream, stream)
+            addr = meta.get("addresses", {}).get(stream, "")
+            fps = meta.get("fps", {}).get(stream)
+            size = meta.get("sizes", {}).get(stream)
+            parts = []
+            if addr:
+                parts.append("IP %s" % addr)
+            if size:
+                parts.append("%d×%d" % (size[0], size[1]))
+            if fps:
+                parts.append("%d fps" % int(fps))
+            parts.append("%d watching" % viewers)
             if age is not None:
                 parts.append("frame %.1fs ago" % age)
             else:
                 parts.append("no frames yet")
             if up is not None:
                 parts.append("up %ds" % int(up))
-            sub = Gtk.Label(label="  ·  ".join(parts), xalign=0)
+            sub = Gtk.Label(
+                label="·".join([" " + p + " " for p in parts]),
+                xalign=0,
+            )
             sub.get_style_context().add_class("meta")
             if age is not None and age > 10:
                 sub.get_style_context().add_class("meta-err")
             elif age is not None:
                 sub.get_style_context().add_class("meta-ok")
+            if host and host != stream:
+                host_line = Gtk.Label(label=host, xalign=0)
+                host_line.get_style_context().add_class("session-host")
+                row.pack_start(host_line, False, False, 0)
             row.pack_start(top, False, False, 0)
             row.pack_start(sub, False, False, 0)
             self.listbox.add(row)
         self.listbox.show_all()
         self._set_pill(self.pill_relay, "dot-ok", "Relay: %s:%s" % (self.server, self.port))
         if not self.sharing:
-            self._set_hero("Sessions found", "%d session(s) shared on the relay." % len(streams))
+            self._set_hero("Idle  •  Ready to share or connect", "%d session(s) shared on the relay." % len(streams))
 
     def _auto_refresh(self):
         self._refresh_sessions()
@@ -592,14 +647,20 @@ class LanShareApp:
 
     # -- sharing ----------------------------------------------------------
 
+    def _on_cta_clicked(self, button):
+        if self.sharing:
+            self._on_stop_clicked(button)
+        else:
+            self._on_share_clicked(button)
+
     def _on_share_clicked(self, button):
         name = self.entry_name.get_text().strip() or socket.gethostname()
         self.entry_name.set_text(name)
         try:
             server = self.entry_server.get_text().strip() or self.server
             port = int(self.entry_port.get_text().strip() or self.port)
-            fps = max(1.0, float(self.entry_fps.get_text().strip() or 10))
-            quality = max(1, min(100, int(self.entry_quality.get_text().strip() or 80)))
+            fps = float(self._fps_value)
+            quality = int(round(self.scale_quality.get_value()))
         except ValueError as exc:
             self.share_status.set_text("Invalid settings: %s" % exc)
             return
@@ -612,6 +673,7 @@ class LanShareApp:
         self._share_stop.clear()
 
         self.sharing = True
+        self._share_name = name
         self._share_thread = threading.Thread(
             target=self._share_worker,
             args=(server, port, name, fps, quality, region),
@@ -628,8 +690,17 @@ class LanShareApp:
         sock = None
         try:
             sock = socket.create_connection((server, port), timeout=5)
+            width, height = self._capture_size(region)
             protocol.send_message(
-                sock, {"type": protocol.SHARER_HELLO, "stream": stream, "host": stream}
+                sock,
+                {
+                    "type": protocol.SHARER_HELLO,
+                    "stream": stream,
+                    "host": stream,
+                    "fps": fps,
+                    "width": width,
+                    "height": height,
+                },
             )
             try:
                 self._wait_ack(sock, protocol.SHARER_REGISTERED, 5.0)
@@ -689,14 +760,14 @@ class LanShareApp:
         self.share_status.set_text("Share failed: %s" % error)
         self._set_pill(self.pill_share, "dot", "Not sharing")
         self._set_pill(self.pill_relay, "dot-err", "Relay: unreachable")
-        self._set_hero("Cannot reach the relay", "The relay server is not responding at %s:%s. Start it with: ./scripts/run_server.sh" % (server, port))
+        self._set_hero("Relay unreachable", "The relay server is not responding at %s:%s. Start it with: ./scripts/run_server.sh" % (server, port))
         self._set_status("Relay unreachable at %s:%s" % (server, port), "dot-err")
 
     def _on_stop_clicked(self, button):
         self._stop_sharing()
         self.share_status.set_text("Sharing stopped.")
         self._set_pill(self.pill_share, "dot", "Not sharing")
-        self._set_hero("Not sharing", "Share this screen with a session name, or watch a session below.")
+        self._set_hero("Idle  •  Ready to share or connect", "Share this screen with a session name, or watch a session below.")
         self._refresh_sessions()
 
     def _stop_sharing(self):
@@ -708,8 +779,14 @@ class LanShareApp:
         self._set_sharing_ui(False)
 
     def _set_sharing_ui(self, sharing):
-        self.btn_share.set_sensitive(not sharing)
-        self.btn_stop.set_sensitive(sharing)
+        self.btn_cta.set_label("Stop sharing" if sharing else "Start sharing")
+        ctx = self.btn_cta.get_style_context()
+        if sharing:
+            ctx.add_class("danger")
+            ctx.remove_class("primary")
+        else:
+            ctx.add_class("primary")
+            ctx.remove_class("danger")
         self.entry_name.set_sensitive(not sharing)
 
     # -- watch ------------------------------------------------------------

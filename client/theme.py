@@ -63,17 +63,43 @@ window { background-color: %(bg)s; color: %(text)s; }
 .pill .dot { min-width: 8px; min-height: 8px; border-radius: 4px; background-color: %(muted)s; }
 .dot-ok { background-color: %(ok)s; }
 .dot-err { background-color: %(err)s; }
-.content { background-color: %(bg)s; }
+.content { background-color: %(bg)s; padding: 16px 20px; }
 .hero-title { font-size: 20px; font-weight: 600; color: %(text)s; }
 .hero-sub { font-size: 13px; color: %(muted)s; }
 .meta { font-size: 11px; color: %(muted)s; }
 .meta-ok { color: %(ok)s; }
 .meta-err { color: %(err)s; }
-.card { background-color: %(card)s; border: 1px solid %(border)s; border-radius: 12px; }
+.card { background-color: %(card)s; border: 1px solid %(border)s; border-radius: 12px; padding: 14px 16px; }
 .card-title {
     font-size: 11px; font-weight: 600; letter-spacing: 1px; color: %(muted)s;
 }
 .field { font-size: 11px; color: %(muted)s; }
+.segmented { background-color: %(surface)s; border: 1px solid %(border)s; border-radius: 999px; padding: 2px; }
+.segmented button.seg {
+    background-color: transparent; background-image: none; border: none;
+    box-shadow: none; border-radius: 999px; color: %(muted)s; padding: 4px 0;
+}
+.segmented button.seg:checked {
+    background-color: %(accent)s; color: #ffffff; font-weight: 500;
+}
+scale trough {
+    background-color: %(pill)s; border-radius: 4px; min-height: 6px;
+}
+scale highlight { background-color: %(accent-strong)s; border-radius: 4px; }
+scale slider {
+    background-color: %(text-strong)s; border: none; border-radius: 50%%;
+    min-width: 14px; min-height: 14px;
+}
+#quality-label { font-size: 12px; color: %(text-strong)s; }
+.session-card {
+    background-color: %(surface)s; border: 1px solid %(border)s;
+    border-radius: 10px; padding: 8px 10px;
+}
+.session-card:hover { border-color: %(accent-strong)s; }
+.session-name { font-size: 14px; font-weight: 600; color: %(text-strong)s; }
+.session-host { font-size: 11px; color: %(muted)s; }
+.session-list { background-color: transparent; }
+button.watch-btn { padding: 4px 12px; font-size: 12px; }
 entry, spinbutton {
     background-color: %(surface)s; background-image: none;
     border: 1px solid %(border)s; border-radius: 10px;
@@ -93,6 +119,7 @@ button:hover { background-color: %(accent)s; color: #ffffff; border-color: %(acc
 button.primary { background-color: %(accent)s; border-color: %(accent-strong)s; color: #ffffff; font-weight: 500; }
 button.small { padding: 3px 10px; font-size: 11px; }
 button.danger { background-color: %(err-dim)s; border-color: %(err-border)s; color: %(err)s; }
+button.danger:hover { background-color: %(err)s; border-color: %(err)s; color: #ffffff; }
 button:disabled { opacity: 0.45; }
 .list-row { background-color: %(surface)s; border-bottom: 1px solid %(border)s; }
 .list-row:hover { background-color: %(card)s; }

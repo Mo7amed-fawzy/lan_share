@@ -39,6 +39,32 @@ class ScreenCapture:
             image = self._fit(image, self.target_size[0], self.target_size[1])
         return image
 
+    def output_size(self):
+        """Expected (width, height) of images produced by ``grab_raw``.
+
+        Performs a single screen grab (no encode) so the sharer can report
+        its true normalized resolution to the relay.
+        """
+        with self._lock:
+            image = ImageGrab.grab(bbox=self.region)
+        if self.scale != 1.0:
+            return (
+                max(1, int(image.width * self.scale)),
+                max(1, int(image.height * self.scale)),
+            )
+        if self.target_size:
+            ratio = min(
+                self.target_size[0] / image.width,
+                self.target_size[1] / image.height,
+            )
+            if abs(ratio - 1.0) < 1e-6:
+                return (image.width, image.height)
+            return (
+                max(1, round(image.width * ratio)),
+                max(1, round(image.height * ratio)),
+            )
+        return (image.width, image.height)
+
     @staticmethod
     def _fit(image, width, height):
         ratio = min(width / image.width, height / image.height)
