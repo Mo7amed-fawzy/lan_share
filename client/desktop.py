@@ -124,6 +124,11 @@ class LanShareApp:
         self._watch_stream = None
         self._watch_sock = None
         self._watch_has_control = False
+        self._watch_video_raw_size = None
+        self._watch_header_revealer = None
+        self._watch_toggle_btn = None
+        self._watch_header_timer = None
+        self._watch_eventbox = None
         self._relay_proc = None
 
         self._apply_css()
@@ -723,7 +728,12 @@ class LanShareApp:
                 target=self._share_reader, args=(sock,), daemon=True
             )
             reader.start()
-            capture = ScreenCapture(region=region, quality=quality, target_size=SHARE_TARGET)
+            capture = ScreenCapture(
+                region=region,
+                quality=quality,
+                target_size=SHARE_TARGET,
+                show_cursor=True,
+            )
             seq = 0
             while not self._share_stop.is_set():
                 start = time.monotonic()
@@ -928,6 +938,8 @@ class LanShareApp:
         self._watch_window = Gtk.Window(title="Lan-Share - %s" % stream)
         self._watch_window.set_default_size(1600, 900)
         self._watch_window.set_position(Gtk.WindowPosition.CENTER)
+        self._watch_window.set_decorated(True)
+        self._watch_window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self._watch_window.connect("delete-event", self._on_watch_closed)
         self._watch_window.connect("key-press-event", self._on_watch_key)
         self._watch_window.connect("window-state-event", self._on_watch_state)
@@ -936,11 +948,11 @@ class LanShareApp:
         self._watch_window.add(overlay)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        vbox.get_style_context().add_class("content")
         overlay.add(vbox)
 
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        header.set_margin_top(6); header.set_margin_bottom(6)
+        header.get_style_context().add_class("watch-bar")
+        header.set_margin_top(4); header.set_margin_bottom(4)
         header.set_margin_start(12); header.set_margin_end(12)
         self._watch_live_dot = Gtk.Box()
         self._watch_live_dot.set_size_request(10, 10)
@@ -954,32 +966,50 @@ class LanShareApp:
         self._watch_fps_label.get_style_context().add_class("meta")
         self._watch_age_label = Gtk.Label(label="", xalign=0)
         self._watch_age_label.get_style_context().add_class("meta")
-        header.pack_end(Gtk.Label(label=""), False, False, 0)
         header.pack_end(self._watch_age_label, False, False, 0)
         header.pack_end(Gtk.Label(label="·"), False, False, 0)
         header.pack_end(self._watch_fps_label, False, False, 0)
         self._btn_control = Gtk.Button(label="Request Control")
         self._btn_control.get_style_context().add_class("primary")
-        self._btn_control.set_sensitive(False)
         self._btn_control.connect("clicked", self._on_request_control)
         header.pack_end(self._btn_control, False, False, 0)
-        vbox.pack_start(header, False, False, 0)
 
-        self._watch_image = Gtk.Image()
-        self._watch_image.set_halign(Gtk.Align.FILL)
-        self._watch_image.set_valign(Gtk.Align.FILL)
-        self._watch_image.connect("size-allocate", self._on_watch_resize)
-        self._watch_image.add_events(
+        self._watch_header_revealer = Gtk.Revealer()
+        self._watch_header_revealer.set_transition_type(
+            Gtk.RevealerTransitionType.SLIDE_DOWN
+        )
+        self._watch_header_revealer.set_transition_duration(180)
+        self._watch_header_revealer.set_reveal_child(True)
+        self._watch_header_revealer.add(header)
+        vbox.pack_start(self._watch_header_revealer, False, False, 0)
+
+        self._watch_eventbox = Gtk.EventBox()
+        self._watch_eventbox.add_events(
             Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.BUTTON_PRESS_MASK
             | Gdk.EventMask.BUTTON_RELEASE_MASK
             | Gdk.EventMask.SCROLL_MASK
         )
-        self._watch_image.connect("motion-notify-event", self._on_watch_motion)
-        self._watch_image.connect("button-press-event", self._on_watch_button)
-        self._watch_image.connect("button-release-event", self._on_watch_button_release)
-        self._watch_image.connect("scroll-event", self._on_watch_scroll)
-        vbox.pack_start(self._watch_image, True, True, 0)
+        self._watch_image = Gtk.Image()
+        self._watch_image.set_halign(Gtk.Align.FILL)
+        self._watch_image.set_valign(Gtk.Align.FILL)
+        self._watch_image.connect("size-allocate", self._on_watch_resize)
+        self._watch_eventbox.add(self._watch_image)
+        self._watch_eventbox.connect("motion-notify-event", self._on_watch_motion)
+        self._watch_eventbox.connect("motion-notify-event", self._on_watch_hover)
+        self._watch_eventbox.connect("button-press-event", self._on_watch_button)
+        self._watch_eventbox.connect("button-release-event", self._on_watch_button_release)
+        self._watch_eventbox.connect("scroll-event", self._on_watch_scroll)
+        vbox.pack_start(self._watch_eventbox, True, True, 0)
+
+        self._watch_toggle_btn = Gtk.Button(label="\u25be")
+        self._watch_toggle_btn.get_style_context().add_class("watch-toggle")
+        self._watch_toggle_btn.set_valign(Gtk.Align.START)
+        self._watch_toggle_btn.set_halign(Gtk.Align.START)
+        self._watch_toggle_btn.set_margin_top(6)
+        self._watch_toggle_btn.set_margin_start(6)
+        self._watch_toggle_btn.connect("clicked", self._on_watch_toggle)
+        overlay.add_overlay(self._watch_toggle_btn)
 
         self._watch_msg = Gtk.Label(label="")
         self._watch_msg.set_name("stream-empty")
@@ -995,6 +1025,59 @@ class LanShareApp:
         )
         self._watch_thread.start()
         GLib.timeout_add(250, self._watch_tick)
+
+    # -- watch header auto-hide ------------------------------------------
+
+    def _show_watch_header(self, sticky=False):
+        if self._watch_header_revealer is not None:
+            self._watch_header_revealer.set_reveal_child(True)
+        if self._watch_toggle_btn is not None:
+            self._watch_toggle_btn.set_label("\u25b4")
+        self._reset_watch_header_timer(sticky)
+
+    def _hide_watch_header(self):
+        if self._watch_header_revealer is not None:
+            self._watch_header_revealer.set_reveal_child(False)
+        if self._watch_toggle_btn is not None:
+            self._watch_toggle_btn.set_label("\u25be")
+        if self._watch_header_timer is not None:
+            GLib.source_remove(self._watch_header_timer)
+        self._watch_header_timer = None
+
+    def _reset_watch_header_timer(self, sticky=False):
+        if self._watch_header_timer is not None:
+            GLib.source_remove(self._watch_header_timer)
+        self._watch_header_timer = GLib.timeout_add(
+            4000 if sticky else 2200, self._on_watch_header_timeout
+        )
+
+    def _on_watch_header_timeout(self):
+        self._watch_header_timer = None
+        win = self._watch_window.get_window() if self._watch_window else None
+        if win is not None:
+            _, y, _ = win.get_pointer()
+            if y < 48:
+                self._reset_watch_header_timer()
+                return False
+        self._hide_watch_header()
+        return False
+
+    def _on_watch_hover(self, widget, event):
+        if event.y < 42:
+            self._show_watch_header()
+        elif self._watch_header_revealer is not None and (
+            self._watch_header_revealer.get_reveal_child() or self._watch_header_timer
+        ):
+            self._reset_watch_header_timer()
+        return False
+
+    def _on_watch_toggle(self, button):
+        if self._watch_header_revealer is None:
+            return
+        if self._watch_header_revealer.get_reveal_child():
+            self._hide_watch_header()
+        else:
+            self._show_watch_header(sticky=True)
 
     def _on_watch_resize(self, widget, alloc):
         if self._watch_last_pixbuf is not None:
@@ -1074,29 +1157,51 @@ class LanShareApp:
         except OSError:
             pass
 
+    def _normalize_watch_coords(self, x, y, vw, vh):
+        """Convert a point in the watch widget into normalized 0..1 src coords.
+
+        Accounts for the centre-crop done by ``_set_watch_pixbuf`` so pointer
+        events land exactly on the same pixel of the host's screen even for
+        non-16:9 sources.
+        """
+        size = self._watch_video_raw_size
+        if size:
+            sw, sh = size
+        else:
+            sw, sh = vw, vh
+        if sw <= 0 or sh <= 0 or vw <= 1 or vh <= 1:
+            return None
+        ratio = max(vw / sw, vh / sh)
+        rw, rh = sw * ratio, sh * ratio
+        src_x = (x + (rw - vw) / 2.0) / rw
+        src_y = (y + (rh - vh) / 2.0) / rh
+        if not (0.0 <= src_x <= 1.0 and 0.0 <= src_y <= 1.0):
+            return None
+        return src_x, src_y
+
     def _on_watch_motion(self, widget, event):
         if not self._watch_has_control:
             return False
         alloc = widget.get_allocation()
-        if alloc.width <= 1 or alloc.height <= 1:
+        coords = self._normalize_watch_coords(event.x, event.y, alloc.width, alloc.height)
+        if coords is None:
             return False
-        self._send_control_input({
-            "type": "motion",
-            "x": event.x / alloc.width,
-            "y": event.y / alloc.height,
-        })
+        self._send_control_input({"type": "motion", "x": coords[0], "y": coords[1]})
         return False
 
     def _on_watch_button(self, widget, event):
         if not self._watch_has_control:
             return False
         alloc = widget.get_allocation()
+        coords = self._normalize_watch_coords(event.x, event.y, alloc.width, alloc.height)
+        if coords is None:
+            coords = (0.5, 0.5)
         self._send_control_input({
             "type": "button",
             "button": event.button,
             "pressed": True,
-            "x": (event.x / alloc.width) if alloc.width > 1 else 0,
-            "y": (event.y / alloc.height) if alloc.height > 1 else 0,
+            "x": coords[0],
+            "y": coords[1],
         })
         return True
 
@@ -1211,6 +1316,11 @@ class LanShareApp:
                         self._watch_frame_times = self._watch_frame_times[-30:]
                     pixbuf = self._jpeg_to_pixbuf(payload)
                     if pixbuf is not None:
+                        if self._watch_video_raw_size is None:
+                            self._watch_video_raw_size = (
+                                pixbuf.get_width(),
+                                pixbuf.get_height(),
+                            )
                         GLib.idle_add(self._set_watch_pixbuf, pixbuf)
         except (OSError, protocol.ProtocolError):
             self._ui_update(self._watch_fail, "Lost connection to the relay at %s:%s"
@@ -1292,6 +1402,10 @@ class LanShareApp:
         self._watch_has_control = False
         self._watch_sock = None
         self._watch_stream = None
+        self._watch_video_raw_size = None
+        if self._watch_header_timer is not None:
+            GLib.source_remove(self._watch_header_timer)
+            self._watch_header_timer = None
         if self._watch_window is not None:
             self._watch_window.destroy()
             self._watch_window = None
@@ -1299,6 +1413,9 @@ class LanShareApp:
             self._watch_msg = None
             self._watch_live_dot = None
             self._btn_control = None
+            self._watch_eventbox = None
+            self._watch_header_revealer = None
+            self._watch_toggle_btn = None
             self._watch_last_pixbuf = None
         return True
 

@@ -127,4 +127,11 @@ button:disabled { opacity: 0.45; }
 #status-bar { background-color: %(surface)s; color: %(muted)s; font-size: 11px; padding: 6px 14px; }
 #stream-empty { font-size: 13px; color: %(muted)s; }
 #watch-title { font-size: 14px; color: %(text-strong)s; }
+.watch-bar { background-color: %(surface)s; border-bottom: 1px solid %(border)s; }
+button.watch-toggle {
+    background-color: %(surface)s; border: 1px solid %(border)s;
+    border-radius: 999px; padding: 2px 8px; font-size: 10px;
+    color: %(muted)s; opacity: 0.85;
+}
+button.watch-toggle:hover { background-color: %(accent)s; color: #ffffff; }
 """ % p
